@@ -9,7 +9,11 @@ import 'ui/login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await scheduleBackgroundRefresh();
+  try {
+    await scheduleBackgroundRefresh();
+  } on Exception {
+    // Background refresh is optional: never block the UI if scheduling fails.
+  }
   runApp(const LibreGlanceApp());
 }
 
