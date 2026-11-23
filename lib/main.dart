@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'services/background.dart';
@@ -9,12 +11,9 @@ import 'ui/login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await scheduleBackgroundRefresh();
-  } on Exception {
-    // Background refresh is optional: never block the UI if scheduling fails.
-  }
   runApp(const LibreGlanceApp());
+  // After runApp and not awaited: a hang or failure here must never block the UI.
+  unawaited(scheduleBackgroundRefresh().catchError((Object _) {}));
 }
 
 class LibreGlanceApp extends StatefulWidget {

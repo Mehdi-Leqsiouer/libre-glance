@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import '../models/glucose.dart';
 
 /// Version header expected by LibreLinkUp; bump here if the API rejects it.
-const String libreLinkUpVersion = '4.12.0';
+const String libreLinkUpVersion = '4.16.0';
 const String libreLinkUpProduct = 'llu.ios';
 const String defaultBaseUrl = 'https://api-eu.libreview.io';
 
@@ -99,8 +99,11 @@ class LibreLinkUpService {
   /// Returns `data` from the response envelope.
   dynamic _decode(http.Response res) {
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      final body = res.body.length > 200
+          ? res.body.substring(0, 200)
+          : res.body;
       throw LibreLinkUpException(
-        'HTTP ${res.statusCode}',
+        '${res.request?.method} ${res.request?.url.path} -> HTTP ${res.statusCode} $body',
         statusCode: res.statusCode,
       );
     }
