@@ -45,6 +45,10 @@ The API `version` header is the constant `libreLinkUpVersion` in `lib/services/l
 
 The same toggle shows a silent, persistent, low-priority notification (`CustomLiveActivityManager.kt`) with value + trend arrow. Notification permission is requested on first use. Periodic refresh via WorkManager (15 min minimum on Android).
 
+## Xcode Cloud (push on `main` -> TestFlight)
+
+`ios/ci_scripts/ci_post_clone.sh` installs Flutter (pinned `FLUTTER_VERSION`, keep it equal to `flutter --version` locally), sets the build number from `CI_BUILD_NUMBER` and generates the gitignored iOS files. The workflow itself (start condition, archive, TestFlight post-action) is configured in Xcode (Report navigator > Cloud).
+
 ## TestFlight
 
 1. Set a unique bundle id and team in Xcode.
