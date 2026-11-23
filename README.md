@@ -9,7 +9,7 @@ Minimal Flutter app (iOS + Android) that reads real-time glucose from the **Libr
 | Step | Scope | State |
 |------|-------|-------|
 | 1 | Flutter project, LibreLinkUp client, models, parsing tests | done |
-| 2 | Main screen (login, live value, 4h chart, thresholds, Live Activity toggle) | todo |
+| 2 | Main screen (login, live value, 4h chart, thresholds, Live Activity toggle) | done |
 | 3 | iOS ActivityKit / Dynamic Island + widget, Android notification / widget | todo |
 
 ## Layout
@@ -17,8 +17,8 @@ Minimal Flutter app (iOS + Android) that reads real-time glucose from the **Libr
 ```
 lib/models/     data models + LibreView timestamp / trend parsing
 lib/services/   LibreLinkUp API client (storage and Live Activity manager to come)
-lib/ui/         screens (step 2)
-lib/widgets/    reusable widgets (step 2)
+lib/ui/         login + home screens
+lib/widgets/    glucose card, 4h chart
 ```
 
 ## Develop

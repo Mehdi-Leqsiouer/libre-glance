@@ -1,0 +1,45 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../models/thresholds.dart';
+
+/// Credentials and settings, all in the platform secure storage (KISS: one store).
+class StorageService {
+  StorageService([FlutterSecureStorage? s])
+    : _s = s ?? const FlutterSecureStorage();
+  final FlutterSecureStorage _s;
+
+  Future<({String email, String password})?> readCredentials() async {
+    final email = await _s.read(key: 'email');
+    final password = await _s.read(key: 'password');
+    return (email == null || password == null)
+        ? null
+        : (email: email, password: password);
+  }
+
+  Future<void> saveCredentials(String email, String password) async {
+    await _s.write(key: 'email', value: email);
+    await _s.write(key: 'password', value: password);
+  }
+
+  Future<void> clearCredentials() async {
+    await _s.delete(key: 'email');
+    await _s.delete(key: 'password');
+  }
+
+  Future<Thresholds> readThresholds() async {
+    final min = int.tryParse(await _s.read(key: 'min') ?? '');
+    final max = int.tryParse(await _s.read(key: 'max') ?? '');
+    return Thresholds(min: min ?? 70, max: max ?? 180);
+  }
+
+  Future<void> saveThresholds(Thresholds t) async {
+    await _s.write(key: 'min', value: '${t.min}');
+    await _s.write(key: 'max', value: '${t.max}');
+  }
+
+  Future<bool> readLiveActivity() async =>
+      await _s.read(key: 'live_activity') == '1';
+
+  Future<void> saveLiveActivity(bool on) =>
+      _s.write(key: 'live_activity', value: on ? '1' : '0');
+}
