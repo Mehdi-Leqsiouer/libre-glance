@@ -1,5 +1,7 @@
 import Flutter
 import UIKit
+import UserNotifications
+import flutter_local_notifications
 import workmanager_apple
 
 @main
@@ -13,6 +15,11 @@ import workmanager_apple
     WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "com.datally.libreglance.refresh")
     // Lets the background isolate (workmanager) use plugins such as live_activities.
     WorkmanagerPlugin.setPluginRegistrantCallback { registry in
+      GeneratedPluginRegistrant.register(with: registry)
+    }
+    // Show alerts while the app is open, and let notification actions (snooze) run in a background isolate.
+    UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
+    FlutterLocalNotificationsPlugin.setPluginRegistrantCallback { registry in
       GeneratedPluginRegistrant.register(with: registry)
     }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)

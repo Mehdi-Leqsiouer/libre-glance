@@ -2,18 +2,19 @@ import 'dart:io';
 
 import 'package:workmanager/workmanager.dart';
 
+import 'alert_service.dart';
 import 'librelinkup_service.dart';
 import 'live_activity_manager.dart';
+import 'notification_service.dart';
 import 'storage_service.dart';
 
 const String refreshTask = 'com.datally.libreglance.refresh';
 
-/// Runs in a background isolate: re-login, fetch, push to the Live Activity.
+/// Runs in a background isolate: re-login, fetch, check alerts, update the Live Activity.
 @pragma('vm:entry-point')
 void backgroundDispatcher() {
   Workmanager().executeTask((task, _) async {
     final storage = StorageService();
-    if (!await storage.readLiveActivity()) return true;
     final creds = await storage.readCredentials();
     if (creds == null) return true;
     try {
@@ -22,11 +23,14 @@ void backgroundDispatcher() {
       final patient = (await service.getConnections()).first;
       final m = (await service.getGraph(patient.patientId)).current;
       if (m != null) {
-        await LiveActivityManager().update(
-          m,
-          await storage.readThresholds(),
-          patient.name,
-        );
+        final thresholds = await storage.readThresholds();
+        await AlertService(
+          storage,
+          NotificationService.instance.show,
+        ).check(m, thresholds, patient.name);
+        if (await storage.readLiveActivity()) {
+          await LiveActivityManager().update(m, thresholds, patient.name);
+        }
       }
       return true;
     } on Exception {

@@ -36,6 +36,19 @@ void main() {
     );
   });
 
+  test('FactoryTimestamp (UTC) wins over the local Timestamp', () {
+    final m = GlucoseMeasurement.fromJson({
+      'Value': 100,
+      'TrendArrow': 3,
+      'FactoryTimestamp': '11/23/2026 3:05:09 PM',
+      'Timestamp': '11/23/2026 4:05:09 PM', // local (UTC+1): same instant
+    });
+    expect(
+      m.timestamp.isAtSameMomentAs(DateTime.utc(2026, 11, 23, 15, 5, 9)),
+      isTrue,
+    );
+  });
+
   test('trend mapping incl. unknown fallback', () {
     expect(Trend.fromApi(1), Trend.fallingFast);
     expect(Trend.fromApi(5).arrow, '↑↑');

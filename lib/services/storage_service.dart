@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../models/alerts.dart';
 import '../models/thresholds.dart';
 
 /// Credentials and settings, all in the platform secure storage (KISS: one store).
@@ -42,4 +45,40 @@ class StorageService {
 
   Future<void> saveLiveActivity(bool on) =>
       _s.write(key: 'live_activity', value: on ? '1' : '0');
+
+  Future<Map<String, dynamic>> _readJson(String key) async {
+    final raw = await _s.read(key: key);
+    return raw == null ? {} : jsonDecode(raw) as Map<String, dynamic>;
+  }
+
+  Future<AlertSettings> readAlertSettings() async =>
+      AlertSettings.fromJson(await _readJson('alert_settings'));
+
+  Future<void> saveAlertSettings(AlertSettings s) =>
+      _s.write(key: 'alert_settings', value: jsonEncode(s.toJson()));
+
+  Future<AlertState> readAlertState() async =>
+      AlertState.fromJson(await _readJson('alert_state'));
+
+  Future<void> saveAlertState(AlertState s) =>
+      _s.write(key: 'alert_state', value: jsonEncode(s.toJson()));
+
+  /// Newest first, capped at [historyLimit].
+  Future<List<AlertRecord>> readAlertHistory() async {
+    final raw = await _s.read(key: 'alert_history');
+    if (raw == null) return [];
+    return (jsonDecode(raw) as List<dynamic>)
+        .map((e) => AlertRecord.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  static const historyLimit = 50;
+
+  Future<void> addAlertHistory(List<AlertRecord> added) async {
+    final all = [...added, ...await readAlertHistory()].take(historyLimit);
+    await _s.write(
+      key: 'alert_history',
+      value: jsonEncode([for (final r in all) r.toJson()]),
+    );
+  }
 }

@@ -5,6 +5,10 @@ final DateFormat _libreTimestamp = DateFormat('M/d/yyyy h:mm:ss a', 'en_US');
 
 DateTime parseLibreTimestamp(String raw) => _libreTimestamp.parse(raw.trim());
 
+/// `FactoryTimestamp` is the same format but in UTC: the only unambiguous instant.
+DateTime parseLibreUtcTimestamp(String raw) =>
+    _libreTimestamp.parseUtc(raw.trim()).toLocal();
+
 /// LibreLinkUp trend: 1=falling fast, 2=falling, 3=stable, 4=rising, 5=rising fast.
 enum Trend {
   fallingFast('↓↓'),
@@ -37,7 +41,9 @@ class GlucoseMeasurement {
       GlucoseMeasurement(
         value: (json['Value'] as num).round(),
         trend: Trend.fromApi((json['TrendArrow'] as num?)?.toInt()),
-        timestamp: parseLibreTimestamp(json['Timestamp'] as String),
+        timestamp: json['FactoryTimestamp'] is String
+            ? parseLibreUtcTimestamp(json['FactoryTimestamp'] as String)
+            : parseLibreTimestamp(json['Timestamp'] as String),
       );
 }
 

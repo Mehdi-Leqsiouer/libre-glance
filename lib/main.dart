@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'services/background.dart';
 import 'services/librelinkup_service.dart';
 import 'services/live_activity_manager.dart';
+import 'services/notification_service.dart';
 import 'services/storage_service.dart';
 import 'ui/home_screen.dart';
 import 'ui/login_screen.dart';
@@ -14,6 +15,7 @@ Future<void> main() async {
   runApp(const LibreGlanceApp());
   // After runApp and not awaited: a hang or failure here must never block the UI.
   unawaited(scheduleBackgroundRefresh().catchError((Object _) {}));
+  unawaited(NotificationService.instance.init().catchError((Object _) {}));
 }
 
 class LibreGlanceApp extends StatefulWidget {

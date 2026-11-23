@@ -36,7 +36,8 @@ struct Reading {
     func int(_ k: String) -> Int { sharedDefault.integer(forKey: a.prefixedKey(k)) }
     value = int("glucose")
     trend = int("trend")
-    date = Date(timeIntervalSince1970: sharedDefault.double(forKey: a.prefixedKey("timestamp")) / 1000)
+    // Never in the future: a clock skew would make the relative age count down.
+    date = min(Date(timeIntervalSince1970: sharedDefault.double(forKey: a.prefixedKey("timestamp")) / 1000), Date())
     minTarget = int("min")
     maxTarget = int("max")
     patientName = sharedDefault.string(forKey: a.prefixedKey("patient")) ?? ""

@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../models/glucose.dart';
 import '../models/thresholds.dart';
+import '../services/alert_service.dart';
 import '../services/live_activity_manager.dart';
 import '../services/librelinkup_service.dart';
+import '../services/notification_service.dart';
 import '../services/storage_service.dart';
+import 'alerts_screen.dart';
 import '../widgets/glucose_card.dart';
 import '../widgets/glucose_chart.dart';
 
@@ -37,6 +40,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _loading = true;
   String? _error;
   Timer? _timer;
+  late final AlertService _alerts = AlertService(
+    widget.storage,
+    NotificationService.instance.show,
+  );
 
   GlucoseMeasurement? get _current => _graph?.current ?? _patient?.current;
 
@@ -74,6 +81,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _graph = await widget.service.getGraph(_patient!.patientId);
       _error = null;
       final m = _current;
+      // Alerts first: they matter more than the Live Activity refresh.
+      if (m != null) await _alerts.check(m, _thresholds, _patient!.name);
       if (_liveOn && m != null) {
         await widget.liveActivity.update(m, _thresholds, _patient!.name);
       }
@@ -117,6 +126,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         title: Text(
           _patient?.name.isNotEmpty == true ? _patient!.name : 'LibreGlance',
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Alertes',
+            icon: const Icon(Icons.notifications_active_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => AlertsScreen(storage: widget.storage),
+              ),
+            ),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
