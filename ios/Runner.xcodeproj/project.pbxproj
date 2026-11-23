@@ -563,6 +563,7 @@
 		};
 		70495BC121CAA33810FE7FBD /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = LibreGlanceLiveActivity/LibreGlanceLiveActivity.entitlements;
@@ -584,6 +585,7 @@
 		};
 		7E04F0FB7D79E4DD7EC0FDB5 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = LibreGlanceLiveActivity/LibreGlanceLiveActivity.entitlements;
@@ -604,6 +606,7 @@
 		};
 		85D331FBD8CFDBF52847269A /* Profile */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = LibreGlanceLiveActivity/LibreGlanceLiveActivity.entitlements;
