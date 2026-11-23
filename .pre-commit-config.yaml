@@ -1,0 +1,31 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+        exclude: ^(ios|android)/.*\.(png|pbxproj)$
+      - id: trailing-whitespace
+        exclude: ^(ios|android)/
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: dart-format
+        name: dart format
+        entry: dart format
+        language: system
+        types: [dart]
+      - id: flutter-analyze
+        name: flutter analyze
+        entry: flutter analyze
+        language: system
+        types: [dart]
+        pass_filenames: false
+      - id: flutter-test
+        name: flutter test
+        entry: flutter test
+        language: system
+        types: [dart]
+        pass_filenames: false
