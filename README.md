@@ -10,7 +10,7 @@ Minimal Flutter app (iOS + Android) that reads real-time glucose from the **Libr
 |------|-------|-------|
 | 1 | Flutter project, LibreLinkUp client, models, parsing tests | done |
 | 2 | Main screen (login, live value, 4h chart, thresholds, Live Activity toggle) | done |
-| 3 | iOS ActivityKit / Dynamic Island + widget, Android notification / widget | todo |
+| 3 | iOS ActivityKit / Dynamic Island, Android notification, background refresh | done (iOS device test pending) |
 
 ## Layout
 
@@ -32,12 +32,18 @@ flutter test
 Credentials are entered in the app and kept in the platform secure storage. Never commit them.
 The API `version` header is the constant `libreLinkUpVersion` in `lib/services/librelinkup_service.dart`.
 
-## iOS setup (step 3 reference)
+## iOS setup (already applied in the repo)
 
-1. **App Group**: enable `group.com.datally.libreglance` on both the `Runner` and `LibreGlanceLiveActivity` targets (Signing & Capabilities).
-2. **Live Activities**: add `NSSupportsLiveActivities = YES` to `ios/Runner/Info.plist`.
-3. **Background**: enable Background Modes (Background fetch, Background processing) and register the task identifiers in `Info.plist` (`BGTaskSchedulerPermittedIdentifiers`). iOS decides when tasks run; ~5 min refresh is best effort. Remote push updates of the Live Activity would need an APNs server and are out of scope.
-4. Widget extension target `LibreGlanceLiveActivity` defines `LibreGlanceAttributes` (value, trend, timestamp, min/max target, patient name).
+- **Extension target** `LibreGlanceLiveActivity` (`ios/LibreGlanceLiveActivity/`), embedded in `Runner`, iOS 16.2+.
+- **App Group** `group.com.datally.libreglance` on both targets (`Runner.entitlements`, `LibreGlanceLiveActivity.entitlements`). Enable it for your team in Signing & Capabilities and keep the id in sync with `appGroupId` in `lib/services/live_activity_manager.dart`.
+- **`NSSupportsLiveActivities = YES`** in `Runner/Info.plist` and the extension `Info.plist`.
+- **Background**: `UIBackgroundModes` (`fetch`, `processing`) and `BGTaskSchedulerPermittedIdentifiers` (`com.datally.libreglance.refresh`) in `Info.plist`. iOS decides when the task runs, so the ~5 min refresh is best effort (the app also refreshes every minute in the foreground and on resume). No APNs: remote updates are disabled (`iOSEnableRemoteUpdates: false`) and the Push Notifications capability is not needed.
+- The `live_activities` plugin requires the attributes type to be named `LiveActivitiesAppAttributes`; values are passed through the App Group `UserDefaults` (keys: `glucose`, `trend`, `timestamp`, `min`, `max`, `patient`).
+- Test on a real iPhone (14 Pro or later for the Dynamic Island): toggle the switch, then check the lock screen and the island.
+
+## Android
+
+The same toggle shows a silent, persistent, low-priority notification (`CustomLiveActivityManager.kt`) with value + trend arrow. Notification permission is requested on first use. Periodic refresh via WorkManager (15 min minimum on Android).
 
 ## TestFlight
 

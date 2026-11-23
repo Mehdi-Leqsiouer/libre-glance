@@ -1,19 +1,50 @@
+import 'package:live_activities/live_activities.dart';
+
 import '../models/glucose.dart';
 import '../models/thresholds.dart';
 
-/// Entry point for the iOS Live Activity / Dynamic Island.
-// ponytail: no-op until step 3 wires the `live_activities` package and the
-// native extension. The UI already calls these, so only this file changes.
+const String appGroupId = 'group.com.datally.libreglance';
+const String _activityId = 'glucose';
+
+/// iOS Live Activity / Dynamic Island (and Android ongoing notification) via
+/// the `live_activities` plugin. Keys below are read by the Swift extension
+/// and by `CustomLiveActivityManager.kt`: keep them in sync.
 class LiveActivityManager {
-  Future<void> start(
-    GlucoseMeasurement m,
-    Thresholds t,
-    String patient,
-  ) async {}
+  final LiveActivities _plugin = LiveActivities();
+  bool _ready = false;
+
+  Future<void> _init() async {
+    if (_ready) return;
+    await _plugin.init(appGroupId: appGroupId);
+    _ready = true;
+  }
+
+  Future<void> start(GlucoseMeasurement m, Thresholds t, String patient) =>
+      update(m, t, patient);
+
+  /// Creates the activity if needed, otherwise updates it.
   Future<void> update(
     GlucoseMeasurement m,
     Thresholds t,
     String patient,
-  ) async {}
-  Future<void> stop() async {}
+  ) async {
+    await _init();
+    await _plugin.createOrUpdateActivity(
+      _activityId,
+      {
+        'glucose': m.value,
+        'trend': m.trend.index + 1,
+        'timestamp': m.timestamp.millisecondsSinceEpoch,
+        'min': t.min,
+        'max': t.max,
+        'patient': patient,
+      },
+      iOSEnableRemoteUpdates: false, // no APNs server
+    );
+  }
+
+  Future<void> stop() async {
+    await _init();
+    await _plugin.endActivity(_activityId);
+  }
 }

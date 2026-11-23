@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 
+import 'services/background.dart';
 import 'services/librelinkup_service.dart';
 import 'services/live_activity_manager.dart';
 import 'services/storage_service.dart';
 import 'ui/home_screen.dart';
 import 'ui/login_screen.dart';
 
-void main() => runApp(const LibreGlanceApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await scheduleBackgroundRefresh();
+  runApp(const LibreGlanceApp());
+}
 
 class LibreGlanceApp extends StatefulWidget {
   const LibreGlanceApp({super.key});
