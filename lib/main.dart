@@ -39,16 +39,16 @@ class _LibreGlanceAppState extends State<LibreGlanceApp> {
 
   Future<void> _restore() async {
     final c = await _storage.readCredentials();
-    var ok = false;
     if (c != null) {
       try {
         await _service.login(c.email, c.password);
-        ok = true;
       } catch (_) {
-        // Offline or rejected: fall back to the login screen.
+        // Offline or rejected: stay logged in. login() already kept the credentials
+        // in memory, the home screen retries and shows the error, and "Déconnexion"
+        // stays available. Never throw the user back to the login form for a network blip.
       }
     }
-    if (mounted) setState(() => _loggedIn = ok);
+    if (mounted) setState(() => _loggedIn = c != null);
   }
 
   @override

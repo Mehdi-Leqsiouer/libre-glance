@@ -106,6 +106,8 @@ class LibreLinkUpService {
 
   /// GET with one silent re-login on 401/403.
   Future<dynamic> _get(String path) async {
+    // Not logged in yet (e.g. the first login failed offline): do it now.
+    if (_token == null && _email != null) await login(_email!, _password!);
     var res = await _client.get(Uri.parse('$_baseUrl$path'), headers: _headers);
     if ((res.statusCode == 401 || res.statusCode == 403) && _email != null) {
       await login(_email!, _password!);

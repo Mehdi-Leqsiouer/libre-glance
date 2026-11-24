@@ -209,4 +209,25 @@ void main() {
       expect(g.history.map((m) => m.value), [100]);
     });
   });
+
+  test(
+    'a failed (offline) login is retried transparently by the next request',
+    () async {
+      var online = false;
+      final s = LibreLinkUpService(
+        client: MockClient((req) async {
+          if (!online) throw http.ClientException('Failed host lookup');
+          if (req.url.path.endsWith('/login')) return _json(_login('u'));
+          return _json([]);
+        }),
+      );
+      await expectLater(
+        s.login('a', 'b'),
+        throwsA(isA<http.ClientException>()),
+      );
+      online = true;
+      expect(await s.getConnections(), isEmpty); // logs in by itself
+      expect(s.isLoggedIn, isTrue);
+    },
+  );
 }
