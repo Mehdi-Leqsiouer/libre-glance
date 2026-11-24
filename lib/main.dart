@@ -38,6 +38,11 @@ class _LibreGlanceAppState extends State<LibreGlanceApp> {
   }
 
   Future<void> _restore() async {
+    try {
+      await _storage.migrateAccessibility();
+    } catch (_) {
+      // Retried on the next launch; credentials stay readable while unlocked.
+    }
     final c = await _storage.readCredentials();
     if (c != null) {
       try {

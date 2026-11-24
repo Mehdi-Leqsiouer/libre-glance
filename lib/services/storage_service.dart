@@ -7,8 +7,16 @@ import '../models/thresholds.dart';
 
 /// Credentials and settings, all in the platform secure storage (KISS: one store).
 class StorageService {
+  // first_unlock: readable by the background task while the phone is locked
+  // (the default, `unlocked`, makes every background read fail).
   StorageService([FlutterSecureStorage? s])
-    : _s = s ?? const FlutterSecureStorage();
+    : _s =
+          s ??
+          const FlutterSecureStorage(
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock,
+            ),
+          );
   final FlutterSecureStorage _s;
 
   Future<({String email, String password})?> readCredentials() async {
@@ -45,6 +53,17 @@ class StorageService {
 
   Future<void> saveLiveActivity(bool on) =>
       _s.write(key: 'live_activity', value: on ? '1' : '0');
+
+  /// Items written by older builds are only readable while the phone is unlocked.
+  /// Re-write them once with the `first_unlock` accessibility. Foreground only.
+  Future<void> migrateAccessibility() async {
+    if (await _s.read(key: 'kc_first_unlock') == '1') return;
+    for (final e in (await _s.readAll()).entries) {
+      await _s.delete(key: e.key);
+      await _s.write(key: e.key, value: e.value);
+    }
+    await _s.write(key: 'kc_first_unlock', value: '1');
+  }
 
   /// Small boolean flags (e.g. "Live Activity ended reminder already sent").
   Future<bool> readFlag(String key) async => await _s.read(key: key) == '1';

@@ -17,10 +17,13 @@ const String refreshTask = 'com.datally.libreglance.refresh';
 @pragma('vm:entry-point')
 void backgroundDispatcher() {
   Workmanager().executeTask((task, _) async {
-    final storage = StorageService();
-    final creds = await storage.readCredentials();
-    if (creds == null) return true;
+    // Nothing may escape from here. workmanager's iOS side force-casts the error
+    // details sent back to it, and a PlatformException whose details are not a
+    // String (a keychain error code while the phone is locked, ...) aborts the app.
     try {
+      final storage = StorageService();
+      final creds = await storage.readCredentials();
+      if (creds == null) return true;
       final service = LibreLinkUpService();
       await service.login(creds.email, creds.password);
       final patient = await service.firstConnection();
@@ -41,8 +44,6 @@ void backgroundDispatcher() {
       await HistoryStore().add([...graph.history, ?m]);
       return true;
     } catch (_) {
-      // Any failure (network, unexpected payload, a plugin) must stay inside this
-      // task: an error escaping the background isolate can take the app down.
       return false; // let the OS retry
     }
   });
