@@ -16,8 +16,8 @@ Minimal Flutter app (iOS + Android) that reads real-time glucose from the **Libr
 
 ```
 lib/models/     data models + LibreView timestamp / trend parsing
-lib/services/   LibreLinkUp API client (storage and Live Activity manager to come)
-lib/ui/         login + home screens
+lib/services/   LibreLinkUp client, storage, Live Activity, alerts, background refresh
+lib/ui/         login, home and alerts screens
 lib/widgets/    glucose card, 4h chart
 ```
 
@@ -40,6 +40,19 @@ The API `version` header is the constant `libreLinkUpVersion` in `lib/services/l
 - **Background**: `UIBackgroundModes` (`fetch`, `processing`) and `BGTaskSchedulerPermittedIdentifiers` (`com.datally.libreglance.refresh`) in `Info.plist`. iOS decides when the task runs, so the ~5 min refresh is best effort (the app also refreshes every minute in the foreground and on resume). No APNs: remote updates are disabled (`iOSEnableRemoteUpdates: false`) and the Push Notifications capability is not needed.
 - The `live_activities` plugin requires the attributes type to be named `LiveActivitiesAppAttributes`; values are passed through the App Group `UserDefaults` (keys: `glucose`, `trend`, `timestamp`, `min`, `max`, `patient`).
 - Test on a real iPhone (14 Pro or later for the Dynamic Island): toggle the switch, then check the lock screen and the island.
+
+## Alerts
+
+Local notifications, evaluated after every refresh (app open, and the iOS background task when iOS allows it). Each alert is a switch in the in-app Alerts screen (bell icon): urgent low (own threshold, ignores snooze), low (uses the min threshold), rapid fall, high (off by default), data loss (no recent reading, configurable delay). Cooldowns avoid repeats, snooze is available from the notification actions and the app, and the last 50 alerts are kept in a history. The decision logic is the pure function in `lib/services/alert_engine.dart` (tested).
+
+**Reliability limit**: iOS runs background tasks at its own pace (about every 15 min at best), so a low can be detected late, or not at all if the app stays closed for long. Do not rely on it alone. Reliable alerts need a server polling LibreLinkUp and sending APNs pushes.
+
+**Critical alerts (opt-in, off by default)**: ring through silent mode and Do Not Disturb for the two low alerts. The code is ready (`criticalEnabled`, interruption level `critical`) but it needs Apple's Critical Alerts entitlement:
+1. Request it with Apple's "Critical Alerts entitlement request" form.
+2. Once granted, enable the capability on the App ID `com.datally.libreGlance`.
+3. Add `com.apple.developer.usernotifications.critical-alerts` = `true` to `ios/Runner/Runner.entitlements`. Do not add it before approval: signing would fail.
+
+Other alerts use time-sensitive notifications, which pass Focus modes but not the silent switch.
 
 ## Android
 
