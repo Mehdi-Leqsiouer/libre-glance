@@ -9,7 +9,12 @@ const Map<AlertKind, int> repeatEveryMinutes = {
   AlertKind.fastFall: 15,
   AlertKind.high: 60,
   AlertKind.stale: 30,
+  AlertKind.sensorExpiry: 720,
 };
+
+/// Remaining sensor life, or null when the activation date is unknown.
+Duration? sensorTimeLeft(DateTime? start, AlertSettings s, DateTime now) =>
+    start?.add(Duration(days: s.sensorDays)).difference(now);
 
 /// Pure decision: which alerts to fire now, and the new `lastFired` map.
 ///
@@ -22,7 +27,9 @@ const Map<AlertKind, int> repeatEveryMinutes = {
   required AlertSettings settings,
   required AlertState state,
   required DateTime now,
+  DateTime? sensorStart,
 }) {
+  final sensorLeft = sensorTimeLeft(sensorStart, settings, now);
   final active = <AlertKind>{
     if (settings.urgentLowEnabled && m.value < settings.urgentLow)
       AlertKind.urgentLow
@@ -37,6 +44,12 @@ const Map<AlertKind, int> repeatEveryMinutes = {
     if (settings.staleEnabled &&
         now.difference(m.timestamp).inMinutes >= settings.staleMinutes)
       AlertKind.stale,
+    // From 24 h before the end until 12 h after (then the data-loss alert takes over).
+    if (settings.sensorEnabled &&
+        sensorLeft != null &&
+        sensorLeft <= const Duration(hours: 24) &&
+        sensorLeft > const Duration(hours: -12))
+      AlertKind.sensorExpiry,
   };
 
   final snoozed = state.snoozeUntil != null && now.isBefore(state.snoozeUntil!);

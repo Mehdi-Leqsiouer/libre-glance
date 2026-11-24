@@ -42,6 +42,7 @@ dependencies:
   live_activities: ^2.6.1
   workmanager: ^0.10.10
   flutter_local_notifications: ^23.0.4
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:

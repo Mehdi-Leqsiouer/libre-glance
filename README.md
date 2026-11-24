@@ -45,6 +45,10 @@ The API `version` header is the constant `libreLinkUpVersion` in `lib/services/l
 
 Local notifications, evaluated after every refresh (app open, and the iOS background task when iOS allows it). Each alert is a switch in the in-app Alerts screen (bell icon): urgent low (own threshold, ignores snooze), low (uses the min threshold), rapid fall, high (off by default), data loss (no recent reading, configurable delay). Cooldowns avoid repeats, snooze is available from the notification actions and the app, and the last 50 alerts are kept in a history. The decision logic is the pure function in `lib/services/alert_engine.dart` (tested).
 
+Sensor expiry: a reminder 24 h before the end of the sensor (activation date from the graph payload, `activeSensors[0].sensor.a`; lifetime configurable, 14 days by default, 15 for the Plus models). The remaining time is also shown on the main screen.
+
+**Live Activity ended by iOS** (8 h limit): iOS only lets an app start a Live Activity in the foreground, so the background task can only send one notification asking to reopen the app, which recreates it. Silent restarts would need a server and push-to-start.
+
 **Reliability limit**: iOS runs background tasks at its own pace (about every 15 min at best), so a low can be detected late, or not at all if the app stays closed for long. Do not rely on it alone. Reliable alerts need a server polling LibreLinkUp and sending APNs pushes.
 
 **Critical alerts (opt-in, off by default)**: ring through silent mode and Do Not Disturb for the two low alerts. The code is ready (`criticalEnabled`, interruption level `critical`) but it needs Apple's Critical Alerts entitlement:
@@ -53,6 +57,10 @@ Local notifications, evaluated after every refresh (app open, and the iOS backgr
 3. Add `com.apple.developer.usernotifications.critical-alerts` = `true` to `ios/Runner/Runner.entitlements`. Do not add it before approval: signing would fail.
 
 Other alerts use time-sensitive notifications, which pass Focus modes but not the silent switch.
+
+## History and statistics
+
+Every refresh (app and background task) stores the readings locally for 30 days, in 15 min bins (`HistoryStore`, a plain JSON file in the app support directory). The Statistics screen (bar chart icon) shows 24 h / 7 / 14 / 30 days: time below / in / above the target range, mean, standard deviation, CV, min / max and coverage. The history starts when this feature is installed, and gaps are periods where nothing could refresh.
 
 ## Android
 

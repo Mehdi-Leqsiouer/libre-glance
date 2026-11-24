@@ -6,6 +6,9 @@ import '../models/thresholds.dart';
 const String appGroupId = 'group.com.datally.libreglance';
 const String _activityId = 'glucose';
 
+/// Set once we told the user that iOS ended the Live Activity (avoids repeats).
+const String endedReminderFlag = 'la_ended_reminder';
+
 /// iOS Live Activity / Dynamic Island (and Android ongoing notification) via
 /// the `live_activities` plugin. Keys below are read by the Swift extension
 /// and by `CustomLiveActivityManager.kt`: keep them in sync.
@@ -41,6 +44,12 @@ class LiveActivityManager {
       },
       iOSEnableRemoteUpdates: false, // no APNs server
     );
+  }
+
+  /// False once iOS ended it (8 h limit, user dismissed it, ...).
+  Future<bool> isActive() async {
+    await _init();
+    return (await _plugin.getAllActivitiesIds()).contains(_activityId);
   }
 
   Future<void> stop() async {

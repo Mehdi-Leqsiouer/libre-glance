@@ -46,6 +46,12 @@ class StorageService {
   Future<void> saveLiveActivity(bool on) =>
       _s.write(key: 'live_activity', value: on ? '1' : '0');
 
+  /// Small boolean flags (e.g. "Live Activity ended reminder already sent").
+  Future<bool> readFlag(String key) async => await _s.read(key: key) == '1';
+
+  Future<void> saveFlag(String key, bool on) =>
+      _s.write(key: key, value: on ? '1' : '0');
+
   Future<Map<String, dynamic>> _readJson(String key) async {
     final raw = await _s.read(key: key);
     return raw == null ? {} : jsonDecode(raw) as Map<String, dynamic>;

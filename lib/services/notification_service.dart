@@ -70,6 +70,20 @@ class NotificationService {
         false;
   }
 
+  /// Informational notification, outside the alert machinery.
+  Future<void> showInfo(int id, String title, String body) async {
+    await init();
+    await _plugin.show(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails('info', 'Informations'),
+        iOS: DarwinNotificationDetails(),
+      ),
+    );
+  }
+
   Future<void> show(
     AlertKind kind,
     String title,

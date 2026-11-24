@@ -67,12 +67,19 @@ class Connection {
 
 /// Result of `GET /llu/connections/{patientId}/graph`.
 class GlucoseGraph {
-  const GlucoseGraph({required this.current, required this.history});
+  const GlucoseGraph({
+    required this.current,
+    required this.history,
+    this.sensorActivatedAt,
+  });
 
   final GlucoseMeasurement? current;
 
   /// Oldest first.
   final List<GlucoseMeasurement> history;
+
+  /// When the active sensor was started (`activeSensors[0].sensor.a`, unix seconds).
+  final DateTime? sensorActivatedAt;
 
   factory GlucoseGraph.fromJson(Map<String, dynamic> data) {
     final gm =
@@ -86,7 +93,18 @@ class GlucoseGraph {
     return GlucoseGraph(
       current: gm == null ? null : GlucoseMeasurement.fromJson(gm),
       history: points,
+      sensorActivatedAt: _sensorStart(data),
     );
+  }
+
+  static DateTime? _sensorStart(Map<String, dynamic> data) {
+    final sensors = data['activeSensors'];
+    if (sensors is! List || sensors.isEmpty) return null;
+    final sensor = (sensors.first as Map<String, dynamic>)['sensor'];
+    final a = sensor is Map ? sensor['a'] : null;
+    return a is num
+        ? DateTime.fromMillisecondsSinceEpoch(a.toInt() * 1000)
+        : null;
   }
 
   /// Points from the last [window] relative to [now].

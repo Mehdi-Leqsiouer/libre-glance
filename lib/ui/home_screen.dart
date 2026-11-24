@@ -4,12 +4,16 @@ import 'package:flutter/material.dart';
 
 import '../models/glucose.dart';
 import '../models/thresholds.dart';
+import '../models/alerts.dart';
+import '../services/alert_engine.dart';
 import '../services/alert_service.dart';
+import '../services/history_store.dart';
 import '../services/live_activity_manager.dart';
 import '../services/librelinkup_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import 'alerts_screen.dart';
+import 'stats_screen.dart';
 import '../widgets/glucose_card.dart';
 import '../widgets/glucose_chart.dart';
 
@@ -40,6 +44,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _loading = true;
   String? _error;
   Timer? _timer;
+  final HistoryStore _history = HistoryStore();
+  AlertSettings _alertSettings = const AlertSettings();
+  DateTime? _sensorStart;
   late final AlertService _alerts = AlertService(
     widget.storage,
     NotificationService.instance.show,
@@ -82,14 +89,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _error = null;
       final m = _current;
       // Alerts first: they matter more than the Live Activity refresh.
-      if (m != null) await _alerts.check(m, _thresholds, _patient!.name);
+      _sensorStart = _graph!.sensorActivatedAt;
+      _alertSettings = await widget.storage.readAlertSettings();
+      if (m != null) {
+        await _alerts.check(
+          m,
+          _thresholds,
+          _patient!.name,
+          sensorStart: _sensorStart,
+        );
+      }
       if (_liveOn && m != null) {
         await widget.liveActivity.update(m, _thresholds, _patient!.name);
+        // Reopening the app recreates an ended activity: re-arm the reminder.
+        await widget.storage.saveFlag(endedReminderFlag, false);
       }
+      await _history.add([..._graph!.history, ?m]);
     } on Exception catch (e) {
       _error = '$e';
     }
     if (mounted) setState(() => _loading = false);
+  }
+
+  Widget _sensorLine() {
+    final left = sensorTimeLeft(_sensorStart, _alertSettings, DateTime.now())!;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        left.isNegative
+            ? 'Capteur expiré'
+            : 'Capteur : ${left.inDays} j ${left.inHours % 24} h restants',
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+    );
   }
 
   Future<void> _toggleLive(bool on) async {
@@ -128,13 +161,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         actions: [
           IconButton(
-            tooltip: 'Alertes',
-            icon: const Icon(Icons.notifications_active_outlined),
+            tooltip: 'Statistiques',
+            icon: const Icon(Icons.bar_chart),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => AlertsScreen(storage: widget.storage),
+                builder: (_) =>
+                    StatsScreen(history: _history, thresholds: _thresholds),
               ),
             ),
+          ),
+          IconButton(
+            tooltip: 'Alertes',
+            icon: const Icon(Icons.notifications_active_outlined),
+            onPressed: () => Navigator.of(context)
+                .push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => AlertsScreen(storage: widget.storage),
+                  ),
+                )
+                .then((_) => _refresh()),
           ),
         ],
       ),
@@ -154,6 +199,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 if (m != null) GlucoseCard(m: m, thresholds: _thresholds),
+                if (_sensorStart != null) _sensorLine(),
                 SwitchListTile(
                   title: const Text('Afficher dans la Dynamic Island'),
                   value: _liveOn,

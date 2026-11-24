@@ -166,6 +166,21 @@ class _AlertsScreenState extends State<AlertsScreen> {
           ),
           if (_s.staleEnabled)
             _stepper('Délai (min)', _s.staleMinutes, 'staleMinutes', 5, 5, 120),
+          SwitchListTile(
+            title: const Text('Expiration du capteur'),
+            subtitle: const Text('Rappel 24 h avant la fin du capteur'),
+            value: _s.sensorEnabled,
+            onChanged: (v) => _set({'sensorEnabled': v}),
+          ),
+          if (_s.sensorEnabled)
+            _stepper(
+              'Durée du capteur (jours)',
+              _s.sensorDays,
+              'sensorDays',
+              1,
+              10,
+              21,
+            ),
           const Divider(),
           ListTile(
             title: Text(

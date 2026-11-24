@@ -3,7 +3,8 @@ enum AlertKind {
   low('Hypoglycémie'),
   fastFall('Chute rapide'),
   high('Hyperglycémie'),
-  stale('Perte de données');
+  stale('Perte de données'),
+  sensorExpiry('Capteur bientôt expiré');
 
   const AlertKind(this.label);
   final String label;
@@ -20,6 +21,8 @@ class AlertSettings {
     this.staleEnabled = true,
     this.staleMinutes = 15,
     this.criticalEnabled = false,
+    this.sensorEnabled = true,
+    this.sensorDays = 14,
   });
 
   final bool urgentLowEnabled;
@@ -33,6 +36,10 @@ class AlertSettings {
   /// Low alerts ring through silent mode and Do Not Disturb (needs the Apple entitlement).
   final bool criticalEnabled;
 
+  /// Remind 24 h before the sensor ends; Libre 2/3 last 14 days, Libre 2/3 Plus 15.
+  final bool sensorEnabled;
+  final int sensorDays;
+
   factory AlertSettings.fromJson(Map<String, dynamic> j) => AlertSettings(
     urgentLowEnabled: j['urgentLowEnabled'] as bool? ?? true,
     urgentLow: j['urgentLow'] as int? ?? 55,
@@ -42,6 +49,8 @@ class AlertSettings {
     staleEnabled: j['staleEnabled'] as bool? ?? true,
     staleMinutes: j['staleMinutes'] as int? ?? 15,
     criticalEnabled: j['criticalEnabled'] as bool? ?? false,
+    sensorEnabled: j['sensorEnabled'] as bool? ?? true,
+    sensorDays: j['sensorDays'] as int? ?? 14,
   );
 
   Map<String, dynamic> toJson() => {
@@ -53,6 +62,8 @@ class AlertSettings {
     'staleEnabled': staleEnabled,
     'staleMinutes': staleMinutes,
     'criticalEnabled': criticalEnabled,
+    'sensorEnabled': sensorEnabled,
+    'sensorDays': sensorDays,
   };
 
   /// Copy with some JSON keys overridden, e.g. `s.with_({'lowEnabled': false})`.

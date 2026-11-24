@@ -25,6 +25,7 @@ class AlertService {
     Thresholds thresholds,
     String patient, {
     DateTime? now,
+    DateTime? sensorStart,
   }) async {
     now ??= DateTime.now();
     final settings = await _storage.readAlertSettings();
@@ -34,7 +35,9 @@ class AlertService {
       settings: settings,
       state: await _storage.readAlertState(),
       now: now,
+      sensorStart: sensorStart,
     );
+    final sensorLeft = sensorTimeLeft(sensorStart, settings, now);
     // Re-read: a snooze may have been written from a notification action meanwhile.
     final current = await _storage.readAlertState();
     await _storage.saveAlertState(
@@ -44,7 +47,7 @@ class AlertService {
       await _show(
         kind,
         kind.label,
-        _body(kind, m, patient, now),
+        _body(kind, m, patient, now, sensorLeft),
         // Only hypoglycemia is worth waking someone up through silent mode.
         critical:
             settings.criticalEnabled &&
@@ -63,6 +66,7 @@ class AlertService {
     GlucoseMeasurement m,
     String patient,
     DateTime now,
+    Duration? sensorLeft,
   ) {
     final who = patient.isEmpty ? '' : '$patient : ';
     final age = ageLabel(m.timestamp, now: now);
@@ -70,6 +74,10 @@ class AlertService {
       AlertKind.stale =>
         '${who}aucune mesure récente ($age). Le téléphone de la maison est-il '
             'connecté au capteur ?',
+      AlertKind.sensorExpiry =>
+        sensorLeft == null || sensorLeft.isNegative
+            ? '${who}le capteur a atteint sa durée de vie : pense à le remplacer.'
+            : '${who}le capteur expire dans ${sensorLeft.inHours} h : prévois un nouveau capteur.',
       _ => '$who${m.value} mg/dL ${m.trend.arrow} ($age)',
     };
   }
