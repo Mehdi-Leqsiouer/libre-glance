@@ -71,19 +71,37 @@ class LibreLinkUpService {
       headers: _headers,
       body: jsonEncode({'email': _email, 'password': _password}),
     );
-    return _decode(res);
+    final data = _decode(res);
+    return data is Map<String, dynamic> ? data : {};
   }
 
   Future<List<Connection>> getConnections() async {
     final data = await _get('/llu/connections');
-    return (data as List<dynamic>)
-        .map((e) => Connection.fromJson(e as Map<String, dynamic>))
+    if (data is! List) throw _unexpected('/llu/connections', data);
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map(Connection.fromJson)
         .toList();
   }
 
+  /// The followed patient, or a readable error when the account follows nobody.
+  Future<Connection> firstConnection() async {
+    final connections = await getConnections();
+    if (connections.isEmpty) {
+      throw LibreLinkUpException(
+        'Aucun profil suivi sur ce compte LibreLinkUp',
+      );
+    }
+    return connections.first;
+  }
+
+  LibreLinkUpException _unexpected(String path, Object? data) =>
+      LibreLinkUpException('Réponse inattendue de $path : $data');
+
   Future<GlucoseGraph> getGraph(String patientId) async {
     final data = await _get('/llu/connections/$patientId/graph');
-    return GlucoseGraph.fromJson(data as Map<String, dynamic>);
+    if (data is! Map<String, dynamic>) throw _unexpected('graph', data);
+    return GlucoseGraph.fromJson(data);
   }
 
   /// GET with one silent re-login on 401/403.
@@ -107,7 +125,7 @@ class LibreLinkUpService {
         statusCode: res.statusCode,
       );
     }
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    return body['data'];
+    final body = jsonDecode(res.body);
+    return body is Map<String, dynamic> ? body['data'] : null;
   }
 }

@@ -37,6 +37,18 @@ class GlucoseMeasurement {
   final Trend trend;
   final DateTime timestamp;
 
+  /// Null when the payload has no usable value / timestamp (e.g. sensor not reporting).
+  static GlucoseMeasurement? tryFromJson(Map<String, dynamic> json) {
+    final hasTime =
+        json['FactoryTimestamp'] is String || json['Timestamp'] is String;
+    if (json['Value'] is! num || !hasTime) return null;
+    try {
+      return GlucoseMeasurement.fromJson(json);
+    } on FormatException {
+      return null; // unparseable timestamp
+    }
+  }
+
   factory GlucoseMeasurement.fromJson(Map<String, dynamic> json) =>
       GlucoseMeasurement(
         value: (json['Value'] as num).round(),
@@ -60,7 +72,7 @@ class Connection {
     return Connection(
       patientId: json['patientId'] as String,
       name: '${json['firstName'] ?? ''} ${json['lastName'] ?? ''}'.trim(),
-      current: gm == null ? null : GlucoseMeasurement.fromJson(gm),
+      current: gm == null ? null : GlucoseMeasurement.tryFromJson(gm),
     );
   }
 }
@@ -87,11 +99,13 @@ class GlucoseGraph {
             as Map<String, dynamic>?;
     final points =
         (data['graphData'] as List<dynamic>? ?? const [])
-            .map((e) => GlucoseMeasurement.fromJson(e as Map<String, dynamic>))
+            .whereType<Map<String, dynamic>>()
+            .map(GlucoseMeasurement.tryFromJson)
+            .nonNulls
             .toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
     return GlucoseGraph(
-      current: gm == null ? null : GlucoseMeasurement.fromJson(gm),
+      current: gm == null ? null : GlucoseMeasurement.tryFromJson(gm),
       history: points,
       sensorActivatedAt: _sensorStart(data),
     );

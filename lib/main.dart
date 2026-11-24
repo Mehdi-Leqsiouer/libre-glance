@@ -44,7 +44,7 @@ class _LibreGlanceAppState extends State<LibreGlanceApp> {
       try {
         await _service.login(c.email, c.password);
         ok = true;
-      } on Exception {
+      } catch (_) {
         // Offline or rejected: fall back to the login screen.
       }
     }

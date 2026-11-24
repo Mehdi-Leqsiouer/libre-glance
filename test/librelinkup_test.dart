@@ -156,4 +156,57 @@ void main() {
     expect(await svc.getConnections(), isEmpty);
     expect(logins, 2);
   });
+
+  group('bad data never throws an Error', () {
+    LibreLinkUpService svc(Object connectionsData) => LibreLinkUpService(
+      client: MockClient((req) async {
+        if (req.url.path.endsWith('/login')) return _json(_login('u'));
+        return _json(connectionsData);
+      }),
+    );
+
+    test('account following nobody gives a readable exception', () async {
+      final s = svc([]);
+      await s.login('a', 'b');
+      expect(s.firstConnection(), throwsA(isA<LibreLinkUpException>()));
+    });
+
+    test(
+      'unexpected payload shapes give LibreLinkUpException, not TypeError',
+      () async {
+        final s = svc({'oops': 1}); // a map where a list is expected
+        await s.login('a', 'b');
+        expect(s.getConnections(), throwsA(isA<LibreLinkUpException>()));
+        final g = svc([1, 2]); // a list where a map is expected
+        await g.login('a', 'b');
+        expect(g.getGraph('p'), throwsA(isA<LibreLinkUpException>()));
+      },
+    );
+
+    test('a null data envelope at login is a rejected login', () async {
+      final s = LibreLinkUpService(
+        client: MockClient((_) async => http.Response('{"status":4}', 200)),
+      );
+      expect(s.login('a', 'b'), throwsA(isA<LibreLinkUpException>()));
+    });
+
+    test('readings without a value are skipped', () async {
+      final s = svc({
+        'connection': {
+          'glucoseMeasurement': {
+            'TrendArrow': 3,
+            'Timestamp': '11/23/2026 4:05:09 PM',
+          },
+        },
+        'graphData': [
+          {'Timestamp': '11/23/2026 3:00:00 PM'},
+          {'Value': 100, 'TrendArrow': 3, 'Timestamp': '11/23/2026 3:15:00 PM'},
+        ],
+      });
+      await s.login('a', 'b');
+      final g = await s.getGraph('p');
+      expect(g.current, isNull);
+      expect(g.history.map((m) => m.value), [100]);
+    });
+  });
 }

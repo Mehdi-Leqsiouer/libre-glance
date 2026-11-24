@@ -84,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _refresh() async {
     try {
       // Multi-profile picker: first connection for now.
-      _patient ??= (await widget.service.getConnections()).first;
+      _patient ??= await widget.service.firstConnection();
       _graph = await widget.service.getGraph(_patient!.patientId);
       _error = null;
       final m = _current;
@@ -105,7 +105,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         await widget.storage.saveFlag(endedReminderFlag, false);
       }
       await _history.add([..._graph!.history, ?m]);
-    } on Exception catch (e) {
+    } catch (e) {
+      // Errors too (TypeError, StateError): the screen must never die on bad data.
       _error = '$e';
     }
     if (mounted) setState(() => _loading = false);

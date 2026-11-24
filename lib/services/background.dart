@@ -23,7 +23,7 @@ void backgroundDispatcher() {
     try {
       final service = LibreLinkUpService();
       await service.login(creds.email, creds.password);
-      final patient = (await service.getConnections()).first;
+      final patient = await service.firstConnection();
       final graph = await service.getGraph(patient.patientId);
       final m = graph.current;
       if (m != null) {
@@ -40,7 +40,9 @@ void backgroundDispatcher() {
       }
       await HistoryStore().add([...graph.history, ?m]);
       return true;
-    } on Exception {
+    } catch (_) {
+      // Any failure (network, unexpected payload, a plugin) must stay inside this
+      // task: an error escaping the background isolate can take the app down.
       return false; // let the OS retry
     }
   });

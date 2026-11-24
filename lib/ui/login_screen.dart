@@ -41,7 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
       widget.onLoggedIn();
     } on LibreLinkUpException catch (e) {
       setState(() => _error = e.message);
-    } on Exception catch (e) {
+    } catch (e) {
       setState(() => _error = 'Erreur réseau : $e');
     } finally {
       if (mounted) setState(() => _busy = false);
