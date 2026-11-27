@@ -1,10 +1,15 @@
 import 'package:live_activities/live_activities.dart';
+import 'package:live_activities/models/live_activity_state.dart';
 
 import '../models/glucose.dart';
 import '../models/thresholds.dart';
 
 const String appGroupId = 'group.com.datally.libreglance';
 const String _activityId = 'glucose';
+
+/// Without a fresh update after this delay iOS flags the activity as stale and the
+/// widget dims it: background refreshes are rare, so a quiet value must not look live.
+const Duration staleAfter = Duration(minutes: 10);
 
 /// Set once we told the user that iOS ended the Live Activity (avoids repeats).
 const String endedReminderFlag = 'la_ended_reminder';
@@ -43,13 +48,17 @@ class LiveActivityManager {
         'patient': patient,
       },
       iOSEnableRemoteUpdates: false, // no APNs server
+      staleIn: staleAfter,
     );
   }
 
   /// False once iOS ended it (8 h limit, user dismissed it, ...).
   Future<bool> isActive() async {
     await _init();
-    return (await _plugin.getAllActivitiesIds()).contains(_activityId);
+    // getAllActivitiesIds() returns native ids, not ours: ask by custom id instead.
+    final state = await _plugin.getActivityState(_activityId);
+    return state == LiveActivityState.active ||
+        state == LiveActivityState.stale;
   }
 
   Future<void> stop() async {

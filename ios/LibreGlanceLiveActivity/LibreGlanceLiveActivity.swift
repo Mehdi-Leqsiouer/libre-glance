@@ -31,8 +31,10 @@ struct Reading {
   let minTarget: Int
   let maxTarget: Int
   let patientName: String
+  let stale: Bool
 
-  init(_ a: LiveActivitiesAppAttributes) {
+  init(_ a: LiveActivitiesAppAttributes, stale: Bool) {
+    self.stale = stale
     func int(_ k: String) -> Int { sharedDefault.integer(forKey: a.prefixedKey(k)) }
     value = int("glucose")
     trend = int("trend")
@@ -43,8 +45,14 @@ struct Reading {
     patientName = sharedDefault.string(forKey: a.prefixedKey("patient")) ?? ""
   }
 
-  var color: Color { value < minTarget ? .red : (value > maxTarget ? .orange : .green) }
-  var label: String { value < minTarget ? "Bas" : (value > maxTarget ? "Élevé" : "Dans la cible") }
+  var color: Color {
+    if stale { return .gray }
+    return value < minTarget ? .red : (value > maxTarget ? .orange : .green)
+  }
+  var label: String {
+    if stale { return "Données anciennes" }
+    return value < minTarget ? "Bas" : (value > maxTarget ? "Élevé" : "Dans la cible")
+  }
   var arrow: String {
     switch trend {
     case 1: return "↓"
@@ -104,9 +112,9 @@ struct LockScreenView: View {
 struct LibreGlanceLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: LiveActivitiesAppAttributes.self) { context in
-      LockScreenView(r: Reading(context.attributes))
+      LockScreenView(r: Reading(context.attributes, stale: context.isStale))
     } dynamicIsland: { context in
-      let r = Reading(context.attributes)
+      let r = Reading(context.attributes, stale: context.isStale)
       return DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
           Text("\(r.value)").font(.system(size: 36, weight: .bold)).foregroundStyle(r.color)
