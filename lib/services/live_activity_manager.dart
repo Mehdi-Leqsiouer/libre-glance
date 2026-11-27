@@ -18,12 +18,20 @@ const String endedReminderFlag = 'la_ended_reminder';
 /// the `live_activities` plugin. Keys below are read by the Swift extension
 /// and by `CustomLiveActivityManager.kt`: keep them in sync.
 class LiveActivityManager {
+  LiveActivityManager({this.onToken});
+
+  /// Called with the activity's push token (new activity, or token rotated by iOS).
+  final void Function(String token)? onToken;
   final LiveActivities _plugin = LiveActivities();
   bool _ready = false;
 
   Future<void> _init() async {
     if (_ready) return;
     await _plugin.init(appGroupId: appGroupId);
+    _plugin.activityUpdateStream.listen(
+      (update) =>
+          update.mapOrNull(active: (a) => onToken?.call(a.activityToken)),
+    );
     _ready = true;
   }
 
@@ -37,19 +45,14 @@ class LiveActivityManager {
     String patient,
   ) async {
     await _init();
-    await _plugin.createOrUpdateActivity(
-      _activityId,
-      {
-        'glucose': m.value,
-        'trend': m.trend.index + 1,
-        'timestamp': m.timestamp.millisecondsSinceEpoch,
-        'min': t.min,
-        'max': t.max,
-        'patient': patient,
-      },
-      iOSEnableRemoteUpdates: false, // no APNs server
-      staleIn: staleAfter,
-    );
+    await _plugin.createOrUpdateActivity(_activityId, {
+      'glucose': m.value,
+      'trend': m.trend.index + 1,
+      'timestamp': m.timestamp.millisecondsSinceEpoch,
+      'min': t.min,
+      'max': t.max,
+      'patient': patient,
+    }, staleIn: staleAfter);
   }
 
   /// False once iOS ended it (8 h limit, user dismissed it, ...).

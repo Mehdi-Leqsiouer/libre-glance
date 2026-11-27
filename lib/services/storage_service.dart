@@ -48,6 +48,22 @@ class StorageService {
     await _s.write(key: 'max', value: '${t.max}');
   }
 
+  Future<({String url, String apiKey})?> readServer() async {
+    final url = await _s.read(key: 'server_url');
+    final apiKey = await _s.read(key: 'server_key');
+    return (url == null || apiKey == null) ? null : (url: url, apiKey: apiKey);
+  }
+
+  Future<void> saveServer(String url, String apiKey) async {
+    await _s.write(key: 'server_url', value: url);
+    await _s.write(key: 'server_key', value: apiKey);
+  }
+
+  Future<String?> readActivityToken() => _s.read(key: 'activity_token');
+
+  Future<void> saveActivityToken(String token) =>
+      _s.write(key: 'activity_token', value: token);
+
   Future<bool> readLiveActivity() async =>
       await _s.read(key: 'live_activity') == '1';
 

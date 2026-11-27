@@ -37,8 +37,9 @@ The API `version` header is the constant `libreLinkUpVersion` in `lib/services/l
 - **Extension target** `LibreGlanceLiveActivity` (`ios/LibreGlanceLiveActivity/`), embedded in `Runner`, iOS 16.2+.
 - **App Group** `group.com.datally.libreglance` on both targets (`Runner.entitlements`, `LibreGlanceLiveActivity.entitlements`). Enable it for your team in Signing & Capabilities and keep the id in sync with `appGroupId` in `lib/services/live_activity_manager.dart`.
 - **`NSSupportsLiveActivities = YES`** in `Runner/Info.plist` and the extension `Info.plist`.
-- **Background**: `UIBackgroundModes` (`fetch`, `processing`) and `BGTaskSchedulerPermittedIdentifiers` (`com.datally.libreglance.refresh`) in `Info.plist`. iOS decides when the task runs, so the ~5 min refresh is best effort (the app also refreshes every minute in the foreground and on resume). No APNs: remote updates are disabled (`iOSEnableRemoteUpdates: false`) and the Push Notifications capability is not needed.
-- The `live_activities` plugin requires the attributes type to be named `LiveActivitiesAppAttributes`; values are passed through the App Group `UserDefaults` (keys: `glucose`, `trend`, `timestamp`, `min`, `max`, `patient`).
+- **Background**: `UIBackgroundModes` (`fetch`, `processing`) and `BGTaskSchedulerPermittedIdentifiers` (`com.datally.libreglance.refresh`) in `Info.plist`. iOS decides when the task runs and it is rare, so background refreshes are best effort (the app also refreshes every minute in the foreground and on resume). Reliable updates with the app closed come from the push server below.
+- **Push**: `aps-environment` in `Runner.entitlements` and `NSSupportsLiveActivitiesFrequentUpdates` in `Info.plist` (Push Notifications is enabled on the App ID by automatic signing).
+- The `live_activities` plugin requires the attributes type to be named `LiveActivitiesAppAttributes`. The app passes values through the App Group `UserDefaults` (keys: `glucose`, `trend`, `timestamp`, `min`, `max`, `patient`); the server's pushes fill `ContentState` instead (same fields, see `server/libreglance/poll.py`). The extension shows whichever holds the newest reading.
 - Test on a real iPhone (14 Pro or later for the Dynamic Island): toggle the switch, then check the lock screen and the island.
 
 ## Alerts
@@ -61,6 +62,33 @@ Other alerts use time-sensitive notifications, which pass Focus modes but not th
 ## History and statistics
 
 Every refresh (app and background task) stores the readings locally for 30 days, in 15 min bins (`HistoryStore`, a plain JSON file in the app support directory). The Statistics screen (bar chart icon) shows 24 h / 7 / 14 / 30 days: time below / in / above the target range, mean, standard deviation, CV, min / max and coverage. The history starts when this feature is installed, and gaps are periods where nothing could refresh.
+
+## Push server (Live Activity updates with the app closed)
+
+`server/` (Python, `uv`) and `infra/` (Terraform, GCP project `libre-glance`, `europe-west9`). A Cloud Scheduler job calls the private Cloud Run service `libreglance-poll` (`POST /poll`, OIDC, only the scheduler's service account may invoke it) every minute, which keeps the instance warm: it reads the latest LibreLinkUp measurement and, when it is new, sends an APNs `liveactivity` update to the registered activity. The app registers the activity push token (and the thresholds) on the small Cloud Run API (`POST /register`, checked with an API key). State lives in Firestore, secrets in Secret Manager (never in Terraform state or the repo). Production and sandbox APNs are both tried, so TestFlight and Xcode builds work.
+
+Deploy (first time):
+
+```
+cd infra && terraform init && terraform apply          # APIs, registry, Firestore, secret shells, service accounts
+
+# Secret values, added out of band:
+printf '%s' 'LIBRELINKUP_EMAIL'    | gcloud secrets versions add llu-email    --data-file=- --project libre-glance
+printf '%s' 'LIBRELINKUP_PASSWORD' | gcloud secrets versions add llu-password --data-file=- --project libre-glance
+gcloud secrets versions add apns-key-p8 --data-file=/path/to/AuthKey_9583USS5C2.p8 --project libre-glance
+openssl rand -hex 32 | tr -d '\n' | gcloud secrets versions add api-key --data-file=- --project libre-glance
+
+IMAGE=europe-west9-docker.pkg.dev/libre-glance/libreglance/server:v1
+gcloud builds submit server --tag $IMAGE --project libre-glance
+terraform apply -var image=$IMAGE                       # Cloud Run API + private poll service + scheduler
+terraform output api_url
+```
+
+Then in the app: Alerts screen, "Serveur de push", enter the `api_url` and the API key (`gcloud secrets versions access latest --secret api-key --project libre-glance`), and turn on the Dynamic Island switch. To ship a new server version, rebuild the image with a new tag and re-apply with it.
+
+Limits: the server cannot start a Live Activity (iOS 8 h limit, or after the user dismisses it): reopen the app, which recreates it and re-registers its token. Alerts still run in the app only for now.
+
+Develop: `cd server && uv run ruff check . && uv run pytest`.
 
 ## Android
 

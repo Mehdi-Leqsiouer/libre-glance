@@ -6,6 +6,7 @@ import 'services/background.dart';
 import 'services/librelinkup_service.dart';
 import 'services/live_activity_manager.dart';
 import 'services/notification_service.dart';
+import 'services/push_registration.dart';
 import 'services/storage_service.dart';
 import 'ui/home_screen.dart';
 import 'ui/login_screen.dart';
@@ -28,7 +29,8 @@ class LibreGlanceApp extends StatefulWidget {
 class _LibreGlanceAppState extends State<LibreGlanceApp> {
   final _service = LibreLinkUpService();
   final _storage = StorageService();
-  final _liveActivity = LiveActivityManager();
+  late final _registrar = PushRegistrar(_storage);
+  late final _liveActivity = LiveActivityManager(onToken: _registrar.onToken);
   bool? _loggedIn; // null = restoring session
 
   @override
@@ -71,6 +73,7 @@ class _LibreGlanceAppState extends State<LibreGlanceApp> {
         service: _service,
         storage: _storage,
         liveActivity: _liveActivity,
+        registrar: _registrar,
         onLogout: () => setState(() => _loggedIn = false),
       ),
       false => LoginScreen(

@@ -11,6 +11,7 @@ import '../services/history_store.dart';
 import '../services/live_activity_manager.dart';
 import '../services/librelinkup_service.dart';
 import '../services/notification_service.dart';
+import '../services/push_registration.dart';
 import '../services/storage_service.dart';
 import 'alerts_screen.dart';
 import 'stats_screen.dart';
@@ -23,11 +24,13 @@ class HomeScreen extends StatefulWidget {
     required this.service,
     required this.storage,
     required this.liveActivity,
+    required this.registrar,
     required this.onLogout,
   });
   final LibreLinkUpService service;
   final StorageService storage;
   final LiveActivityManager liveActivity;
+  final PushRegistrar registrar;
   final VoidCallback onLogout;
 
   @override
@@ -140,6 +143,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _setThresholds(Thresholds t) async {
     setState(() => _thresholds = t);
     await widget.storage.saveThresholds(t);
+    await widget.registrar.sync();
     final m = _current;
     if (_liveOn && m != null) {
       await widget.liveActivity.update(m, t, _patient?.name ?? '');
@@ -177,7 +181,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             onPressed: () => Navigator.of(context)
                 .push(
                   MaterialPageRoute<void>(
-                    builder: (_) => AlertsScreen(storage: widget.storage),
+                    builder: (_) => AlertsScreen(
+                      storage: widget.storage,
+                      registrar: widget.registrar,
+                    ),
                   ),
                 )
                 .then((_) => _refresh()),

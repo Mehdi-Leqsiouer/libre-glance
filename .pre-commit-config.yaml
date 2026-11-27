@@ -29,3 +29,27 @@ repos:
         language: system
         types: [dart]
         pass_filenames: false
+      - id: server-ruff
+        name: ruff check (server)
+        entry: uv run --project server ruff check server
+        language: system
+        files: ^server/
+        pass_filenames: false
+      - id: server-format
+        name: ruff format (server)
+        entry: uv run --project server ruff format --check server
+        language: system
+        files: ^server/
+        pass_filenames: false
+      - id: server-tests
+        name: pytest (server)
+        entry: uv run --project server pytest -q server
+        language: system
+        files: ^server/
+        pass_filenames: false
+      - id: terraform-fmt
+        name: terraform fmt (infra)
+        entry: terraform fmt -check -recursive infra
+        language: system
+        files: ^infra/
+        pass_filenames: false

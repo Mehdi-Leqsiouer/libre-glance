@@ -9,11 +9,20 @@ struct LibreGlanceBundle: WidgetBundle {
   }
 }
 
-// The `live_activities` plugin requires this exact name and shape. Data is
-// passed through the App Group UserDefaults with keys prefixed by the id.
+// The `live_activities` plugin requires this exact name and shape. App updates pass
+// their data through the App Group UserDefaults (keys prefixed by the id) and leave
+// ContentState empty; the server's APNs pushes fill ContentState instead (keys must
+// match `content_state` in server/libreglance/poll.py).
 struct LiveActivitiesAppAttributes: ActivityAttributes, Identifiable {
   public typealias LiveDeliveryData = ContentState
-  public struct ContentState: Codable, Hashable {}
+  public struct ContentState: Codable, Hashable {
+    var glucose: Int?
+    var trend: Int?
+    var timestampMs: Double?
+    var minTarget: Int?
+    var maxTarget: Int?
+    var patient: String?
+  }
   var id = UUID()
 }
 
@@ -33,16 +42,19 @@ struct Reading {
   let patientName: String
   let stale: Bool
 
-  init(_ a: LiveActivitiesAppAttributes, stale: Bool) {
+  init(_ a: LiveActivitiesAppAttributes, state: LiveActivitiesAppAttributes.ContentState, stale: Bool) {
     self.stale = stale
     func int(_ k: String) -> Int { sharedDefault.integer(forKey: a.prefixedKey(k)) }
-    value = int("glucose")
-    trend = int("trend")
+    let localMs = sharedDefault.double(forKey: a.prefixedKey("timestamp"))
+    // Whichever source holds the newest reading wins (a push or the app's own update).
+    let usePush = state.glucose != nil && (state.timestampMs ?? 0) >= localMs
+    value = usePush ? state.glucose! : int("glucose")
+    trend = usePush ? (state.trend ?? 3) : int("trend")
     // Never in the future: a clock skew would make the relative age count down.
-    date = min(Date(timeIntervalSince1970: sharedDefault.double(forKey: a.prefixedKey("timestamp")) / 1000), Date())
-    minTarget = int("min")
-    maxTarget = int("max")
-    patientName = sharedDefault.string(forKey: a.prefixedKey("patient")) ?? ""
+    date = min(Date(timeIntervalSince1970: (usePush ? state.timestampMs ?? 0 : localMs) / 1000), Date())
+    minTarget = usePush ? (state.minTarget ?? 70) : int("min")
+    maxTarget = usePush ? (state.maxTarget ?? 180) : int("max")
+    patientName = (usePush ? state.patient : sharedDefault.string(forKey: a.prefixedKey("patient"))) ?? ""
   }
 
   var color: Color {
@@ -112,9 +124,9 @@ struct LockScreenView: View {
 struct LibreGlanceLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: LiveActivitiesAppAttributes.self) { context in
-      LockScreenView(r: Reading(context.attributes, stale: context.isStale))
+      LockScreenView(r: Reading(context.attributes, state: context.state, stale: context.isStale))
     } dynamicIsland: { context in
-      let r = Reading(context.attributes, stale: context.isStale)
+      let r = Reading(context.attributes, state: context.state, stale: context.isStale)
       return DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
           Text("\(r.value)").font(.system(size: 36, weight: .bold)).foregroundStyle(r.color)
