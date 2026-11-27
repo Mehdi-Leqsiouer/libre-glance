@@ -82,22 +82,19 @@ def test_snooze_mutes_everything_except_urgent_low():
 
 
 def test_sensor_expiry_in_the_last_24_hours_only():
-    start = WHEN - timedelta(days=12)
-    assert kinds(reading(120), sensor_start=start) == []
-    assert kinds(reading(120), sensor_start=WHEN - timedelta(days=13, hours=1)) == [
+    # default lifetime: 15 days (FreeStyle Libre 2 Plus)
+    assert Settings().sensor_days == 15
+    assert kinds(reading(120), sensor_start=WHEN - timedelta(days=13)) == []
+    assert kinds(reading(120), sensor_start=WHEN - timedelta(days=14, hours=1)) == [
         Kind.SENSOR_EXPIRY
     ]
-    assert kinds(reading(120), sensor_start=WHEN - timedelta(days=14, hours=13)) == []
-    assert (
-        kinds(reading(120), Settings(sensor_enabled=False), sensor_start=WHEN - timedelta(days=14))
-        == []
-    )
-    assert (
-        kinds(
-            reading(120), Settings(sensor_days=15), sensor_start=WHEN - timedelta(days=13, hours=1)
-        )
-        == []
-    )
+    assert kinds(reading(120), sensor_start=WHEN - timedelta(days=15, hours=13)) == []
+    disabled = Settings(sensor_enabled=False)
+    assert kinds(reading(120), disabled, sensor_start=WHEN - timedelta(days=15)) == []
+    shorter = Settings(sensor_days=14)  # an older 14-day sensor
+    assert kinds(reading(120), shorter, sensor_start=WHEN - timedelta(days=13, hours=1)) == [
+        Kind.SENSOR_EXPIRY
+    ]
 
 
 def test_settings_use_the_dart_json_keys_and_defaults():

@@ -22,7 +22,8 @@ class AlertSettings {
     this.staleMinutes = 15,
     this.criticalEnabled = false,
     this.sensorEnabled = true,
-    this.sensorDays = 14,
+    this.sensorDays = 15,
+    this.useLibreThresholds = false,
   });
 
   final bool urgentLowEnabled;
@@ -36,9 +37,13 @@ class AlertSettings {
   /// Low alerts ring through silent mode and Do Not Disturb (needs the Apple entitlement).
   final bool criticalEnabled;
 
-  /// Remind 24 h before the sensor ends; Libre 2/3 last 14 days, Libre 2/3 Plus 15.
+  /// Remind 24 h before the sensor ends; Libre 2 Plus lasts 15 days (older models 14).
   final bool sensorEnabled;
   final int sensorDays;
+
+  /// Take the low, high and urgent low thresholds from the patient's LibreLink app
+  /// instead of the ones set here.
+  final bool useLibreThresholds;
 
   factory AlertSettings.fromJson(Map<String, dynamic> j) => AlertSettings(
     urgentLowEnabled: j['urgentLowEnabled'] as bool? ?? true,
@@ -50,7 +55,8 @@ class AlertSettings {
     staleMinutes: j['staleMinutes'] as int? ?? 15,
     criticalEnabled: j['criticalEnabled'] as bool? ?? false,
     sensorEnabled: j['sensorEnabled'] as bool? ?? true,
-    sensorDays: j['sensorDays'] as int? ?? 14,
+    sensorDays: j['sensorDays'] as int? ?? 15,
+    useLibreThresholds: j['useLibreThresholds'] as bool? ?? false,
   );
 
   Map<String, dynamic> toJson() => {
@@ -64,6 +70,7 @@ class AlertSettings {
     'criticalEnabled': criticalEnabled,
     'sensorEnabled': sensorEnabled,
     'sensorDays': sensorDays,
+    'useLibreThresholds': useLibreThresholds,
   };
 
   /// Copy with some JSON keys overridden, e.g. `s.with_({'lowEnabled': false})`.

@@ -26,14 +26,20 @@ class AlertService {
     String patient, {
     DateTime? now,
     DateTime? sensorStart,
+    LibreAlarms? libre,
   }) async {
     // The server evaluates and sends the alerts: doing it here too would duplicate them.
     if (await _storage.readFlag(serverAlertsFlag)) return;
     now ??= DateTime.now();
-    final settings = await _storage.readAlertSettings();
+    final effective = effectiveAlerts(
+      thresholds,
+      await _storage.readAlertSettings(),
+      libre,
+    );
+    final settings = effective.settings;
     final result = evaluate(
       m: m,
-      thresholds: thresholds,
+      thresholds: effective.thresholds,
       settings: settings,
       state: await _storage.readAlertState(),
       now: now,

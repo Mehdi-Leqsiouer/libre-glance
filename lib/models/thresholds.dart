@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'alerts.dart';
+import 'glucose.dart';
+
 enum GlucoseStatus {
   low('Bas', Colors.red),
   inRange('Dans la cible', Colors.green),
@@ -20,4 +23,25 @@ class Thresholds {
       : value > max
       ? GlucoseStatus.high
       : GlucoseStatus.inRange;
+}
+
+/// The thresholds actually in force: the user's own, or LibreLink's when chosen and known.
+/// A value LibreLink does not give falls back to the user's own.
+({Thresholds thresholds, AlertSettings settings}) effectiveAlerts(
+  Thresholds own,
+  AlertSettings settings,
+  LibreAlarms? libre,
+) {
+  if (!settings.useLibreThresholds || libre == null) {
+    return (thresholds: own, settings: settings);
+  }
+  return (
+    thresholds: Thresholds(
+      min: libre.low ?? own.min,
+      max: libre.high ?? own.max,
+    ),
+    settings: libre.urgentLow == null
+        ? settings
+        : settings.with_({'urgentLow': libre.urgentLow}),
+  );
 }

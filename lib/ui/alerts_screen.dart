@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/alerts.dart';
+import '../models/glucose.dart';
 import '../services/alert_service.dart';
 import '../services/notification_service.dart';
 import '../services/push_registration.dart';
@@ -14,9 +15,13 @@ class AlertsScreen extends StatefulWidget {
     super.key,
     required this.storage,
     required this.registrar,
+    this.libre,
   });
   final StorageService storage;
   final PushRegistrar registrar;
+
+  /// The alarm thresholds of the patient's LibreLink app, when known.
+  final LibreAlarms? libre;
 
   @override
   State<AlertsScreen> createState() => _AlertsScreenState();
@@ -115,6 +120,19 @@ class _AlertsScreenState extends State<AlertsScreen> {
                         'permet (non garanti). Autorise les notifications pour passer '
                         'aux alertes du serveur.',
             ),
+          ),
+          SwitchListTile(
+            title: const Text('Utiliser les seuils de LibreLink'),
+            subtitle: Text(
+              widget.libre == null
+                  ? 'Seuils du téléphone du patient, pas encore reçus. '
+                        'Sinon, ceux de l\'écran principal sont utilisés.'
+                  : 'Bas ${widget.libre!.low ?? '-'}, haut ${widget.libre!.high ?? '-'}, '
+                        'urgent ${widget.libre!.urgentLow ?? '-'} mg/dL. '
+                        'Remplace les seuils bas, haut et urgent ci-dessous.',
+            ),
+            value: _s.useLibreThresholds,
+            onChanged: (v) => _set({'useLibreThresholds': v}),
           ),
           SwitchListTile(
             title: const Text('Mode critique (hypoglycémies)'),

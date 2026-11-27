@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
+import '../models/glucose.dart';
 import '../models/stats.dart';
 import '../models/thresholds.dart';
 import '../services/history_store.dart';
+import '../services/librelinkup_service.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({
     super.key,
     required this.history,
     required this.thresholds,
+    required this.service,
+    required this.patientId,
   });
   final HistoryStore history;
   final Thresholds thresholds;
+  final LibreLinkUpService service;
+  final String? patientId;
 
   @override
   State<StatsScreen> createState() => _StatsScreenState();
@@ -23,11 +30,74 @@ class _StatsScreenState extends State<StatsScreen> {
   GlucoseStats? _stats;
   DateTime? _oldest;
   bool _loaded = false;
+  List<AlarmEvent>? _alarms;
+  String? _alarmsError;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadAlarms();
+  }
+
+  Future<void> _loadAlarms() async {
+    final id = widget.patientId;
+    if (id == null) return;
+    try {
+      final events = await widget.service.getAlarmEvents(id);
+      if (mounted) setState(() => _alarms = events);
+    } catch (e) {
+      if (mounted) setState(() => _alarmsError = '$e');
+    }
+  }
+
+  /// Alarms the patient's device raised over the selected period (LibreLink keeps ~10 days).
+  Widget _alarmSection() {
+    final events = _alarms;
+    if (events == null && _alarmsError == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    if (events == null) {
+      return Text(
+        _alarmsError!,
+        style: TextStyle(color: theme.colorScheme.error),
+      );
+    }
+    final cutoff = DateTime.now().subtract(Duration(days: _days));
+    final shown = events.where((e) => e.timestamp.isAfter(cutoff)).toList();
+    final lows = shown.where((e) => e.kind == AlarmKind.low).length;
+    final highs = shown.where((e) => e.kind == AlarmKind.high).length;
+    final format = DateFormat('d/M HH:mm');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 32),
+        Text('Alarmes du capteur', style: theme.textTheme.titleMedium),
+        Text(
+          '$lows basses · $highs hautes (journal LibreLink, environ 10 jours)',
+          style: theme.textTheme.bodySmall,
+        ),
+        if (shown.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text('Aucune alarme sur cette période.'),
+          ),
+        for (final e in shown.take(15))
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text(switch (e.kind) {
+              AlarmKind.low => 'Alarme basse',
+              AlarmKind.high => 'Alarme haute',
+              AlarmKind.other => 'Alarme',
+            }),
+            subtitle: Text(format.format(e.timestamp)),
+            trailing: Text(
+              '${e.value} mg/dL',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+      ],
+    );
   }
 
   Future<void> _load() async {
@@ -129,6 +199,7 @@ class _StatsScreenState extends State<StatsScreen> {
                 ),
               ),
           ],
+          _alarmSection(),
         ],
       ),
     );

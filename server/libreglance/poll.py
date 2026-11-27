@@ -1,10 +1,11 @@
 import logging
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from .alerts import LABELS, Kind, Settings, evaluate, message, sensor_time_left
 from .apns import ApnsClient, ApnsResult
-from .llu import LibreLinkUpClient, Reading, Session
+from .llu import LibreAlarms, LibreLinkUpClient, Reading, SensorWarmingUp, Session, Snapshot
 from .store import State, Store
 
 log = logging.getLogger(__name__)
@@ -42,47 +43,65 @@ def poll_once(llu: LibreLinkUpClient, apns: ApnsClient, store: Store, now: int) 
 
     if state.llu_session:
         llu.session = Session(**state.llu_session)
-    reading, patient, sensor_start = llu.latest()
-    if llu.session is not None:
-        store.save(llu_session=llu.session.to_dict())
+    try:
+        snap = llu.latest(datetime.fromtimestamp(now, UTC))
+    except SensorWarmingUp:
+        _save_session(llu, store)
+        return "sensor warming up"
+    _save_session(llu, store)
 
+    settings = Settings.from_dict(state.settings)
+    state, settings = with_libre_thresholds(state, settings, snap.alarms)
     outcomes = []
     if state.device_token:
-        outcomes.append(_alerts(apns, store, state, reading, patient, sensor_start, now))
+        outcomes.append(_alerts(apns, store, state, settings, snap, now))
     if live:
-        outcomes.append(_live_activity(apns, store, state, reading, patient, now))
+        outcomes.append(_live_activity(apns, store, state, snap.reading, snap.patient, now))
     return "; ".join(outcomes)
 
 
+def _save_session(llu: LibreLinkUpClient, store: Store) -> None:
+    if llu.session is not None:
+        store.save(llu_session=llu.session.to_dict())
+
+
+def with_libre_thresholds(
+    state: State, settings: Settings, alarms: LibreAlarms | None
+) -> tuple[State, Settings]:
+    """When the user picked LibreLink's alarm thresholds, they replace his own."""
+    if not (settings.use_libre_thresholds and alarms):
+        return state, settings
+    return (
+        replace(
+            state,
+            min_target=alarms.low or state.min_target,
+            max_target=alarms.high or state.max_target,
+        ),
+        replace(settings, urgent_low=alarms.urgent_low or settings.urgent_low),
+    )
+
+
 def _alerts(
-    apns: ApnsClient,
-    store: Store,
-    state: State,
-    reading: Reading,
-    patient: str,
-    sensor_start: datetime | None,
-    now: int,
+    apns: ApnsClient, store: Store, state: State, settings: Settings, snap: Snapshot, now: int
 ) -> str:
-    settings = Settings.from_dict(state.settings)
     when = datetime.fromtimestamp(now, UTC)
     fire, last_fired = evaluate(
-        reading,
+        snap.reading,
         min_target=state.min_target,
         max_target=state.max_target,
         settings=settings,
         last_fired=state.last_fired,
         snooze_until=state.snooze_until or None,
         now=when,
-        sensor_start=sensor_start,
+        sensor_start=snap.sensor_start,
     )
     sent: list[str] = []
     for kind in fire:
+        sensor_left = sensor_time_left(snap.sensor_start, settings, when)
         result = apns.send_alert(
             state.device_token or "",
             title=LABELS[kind],
-            body=message(
-                kind, reading, patient, when, sensor_time_left(sensor_start, settings, when)
-            ),
+            body=message(kind, snap.reading, snap.patient, when, sensor_left),
             kind=kind.value,
             critical=settings.critical_enabled and kind in CRITICAL_KINDS,
             now=now,

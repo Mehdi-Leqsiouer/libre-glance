@@ -36,9 +36,15 @@ void backgroundDispatcher() {
           thresholds,
           patient.name,
           sensorStart: graph.sensorActivatedAt,
+          libre: graph.alarms,
         );
         if (await storage.readLiveActivity()) {
-          await _keepLiveActivity(storage, m, thresholds, patient.name);
+          final shown = effectiveAlerts(
+            thresholds,
+            await storage.readAlertSettings(),
+            graph.alarms,
+          ).thresholds;
+          await _keepLiveActivity(storage, m, shown, patient.name);
         }
       }
       await HistoryStore().add([...graph.history, ?m]);

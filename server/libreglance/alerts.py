@@ -53,7 +53,8 @@ class Settings:
     stale_minutes: int = 15
     critical_enabled: bool = False
     sensor_enabled: bool = True
-    sensor_days: int = 14
+    sensor_days: int = 15
+    use_libre_thresholds: bool = False  # take low / high / urgent low from LibreLink instead
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Settings":
@@ -69,6 +70,7 @@ class Settings:
             critical_enabled=bool(data.get("criticalEnabled", d.critical_enabled)),
             sensor_enabled=bool(data.get("sensorEnabled", d.sensor_enabled)),
             sensor_days=int(data.get("sensorDays", d.sensor_days)),
+            use_libre_thresholds=bool(data.get("useLibreThresholds", d.use_libre_thresholds)),
         )
 
 

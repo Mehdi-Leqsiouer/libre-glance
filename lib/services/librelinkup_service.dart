@@ -104,6 +104,19 @@ class LibreLinkUpService {
     return GlucoseGraph.fromJson(data);
   }
 
+  /// Alarms the patient's device raised recently (about 10 days), newest first.
+  Future<List<AlarmEvent>> getAlarmEvents(String patientId) async {
+    final data = await _get('/llu/connections/$patientId/logbook');
+    final entries = data is Map<String, dynamic> ? data['entries'] : data;
+    if (entries is! List) throw _unexpected('logbook', data);
+    return entries
+        .whereType<Map<String, dynamic>>()
+        .map(AlarmEvent.tryFromJson)
+        .nonNulls
+        .toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
   /// GET with one silent re-login on 401/403.
   Future<dynamic> _get(String path) async {
     // Not logged in yet (e.g. the first login failed offline): do it now.

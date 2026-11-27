@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from libreglance.apns import ApnsResult
-from libreglance.llu import Reading
+from libreglance.llu import LibreAlarms, Reading, SensorWarmingUp, Snapshot
 from libreglance.store import State
 
 NOW = 1_800_000_000
@@ -26,12 +26,20 @@ class FakeStore:
 class FakeLlu:
     session = None
 
-    def __init__(self, current: Reading, sensor_start: datetime | None = None) -> None:
+    def __init__(
+        self,
+        current: Reading | None,
+        sensor_start: datetime | None = None,
+        alarms: LibreAlarms | None = None,
+    ) -> None:
         self.current = current
         self.sensor_start = sensor_start
+        self.alarms = alarms
 
-    def latest(self):
-        return self.current, "Ada", self.sensor_start
+    def latest(self, now=None):
+        if self.current is None:
+            raise SensorWarmingUp("sensor warming up")
+        return Snapshot(self.current, "Ada", self.sensor_start, self.alarms)
 
 
 class FakeApns:

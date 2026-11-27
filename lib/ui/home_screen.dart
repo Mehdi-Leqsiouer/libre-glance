@@ -104,10 +104,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _thresholds,
           _patient!.name,
           sensorStart: _sensorStart,
+          libre: _graph!.alarms,
         );
       }
       if (_liveOn && m != null) {
-        await widget.liveActivity.update(m, _thresholds, _patient!.name);
+        await widget.liveActivity.update(m, _shown, _patient!.name);
         // Reopening the app recreates an ended activity: re-arm the reminder.
         await widget.storage.saveFlag(endedReminderFlag, false);
       }
@@ -118,6 +119,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     if (mounted) setState(() => _loading = false);
   }
+
+  /// The thresholds in force: the user's own, or LibreLink's when chosen.
+  Thresholds get _shown =>
+      effectiveAlerts(_thresholds, _alertSettings, _graph?.alarms).thresholds;
+
+  Widget _warmupCard(Duration left) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Text(
+        'Capteur en préchauffage : première mesure dans '
+        '${left.inMinutes + 1} min.',
+        textAlign: TextAlign.center,
+      ),
+    ),
+  );
 
   Widget _sensorLine() {
     final left = sensorTimeLeft(_sensorStart, _alertSettings, DateTime.now())!;
@@ -138,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() => _liveOn = on);
     await widget.storage.saveLiveActivity(on);
     if (on && m != null) {
-      await widget.liveActivity.start(m, _thresholds, _patient?.name ?? '');
+      await widget.liveActivity.start(m, _shown, _patient?.name ?? '');
     } else {
       await widget.liveActivity.stop();
       await widget.registrar.unregister();
@@ -157,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await widget.registrar.sync();
     final m = _current;
     if (_liveOn && m != null) {
-      await widget.liveActivity.update(m, t, _patient?.name ?? '');
+      await widget.liveActivity.update(m, _shown, _patient?.name ?? '');
     }
   }
 
@@ -181,8 +197,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             icon: const Icon(Icons.bar_chart),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) =>
-                    StatsScreen(history: _history, thresholds: _thresholds),
+                builder: (_) => StatsScreen(
+                  history: _history,
+                  thresholds: _shown,
+                  service: widget.service,
+                  patientId: _patient?.patientId,
+                ),
               ),
             ),
           ),
@@ -195,6 +215,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     builder: (_) => AlertsScreen(
                       storage: widget.storage,
                       registrar: widget.registrar,
+                      libre: _graph?.alarms,
                     ),
                   ),
                 )
@@ -217,7 +238,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                if (m != null) GlucoseCard(m: m, thresholds: _thresholds),
+                if (m != null) GlucoseCard(m: m, thresholds: _shown),
+                if (m == null && _graph?.warmupLeft() != null)
+                  _warmupCard(_graph!.warmupLeft()!),
                 if (_sensorStart != null) _sensorLine(),
                 SwitchListTile(
                   title: const Text('Afficher dans la Dynamic Island'),
@@ -236,13 +259,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 if (_graph != null)
                   GlucoseChart(
                     points: _graph!.last(_window),
-                    thresholds: _thresholds,
+                    thresholds: _shown,
                   ),
                 const SizedBox(height: 8),
-                _ThresholdRow(
-                  thresholds: _thresholds,
-                  onChanged: _setThresholds,
-                ),
+                if (_alertSettings.useLibreThresholds && _graph?.alarms != null)
+                  Text(
+                    'Seuils LibreLink : ${_shown.min} - ${_shown.max} mg/dL '
+                    '(modifiable dans Alertes)',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  )
+                else
+                  _ThresholdRow(
+                    thresholds: _thresholds,
+                    onChanged: _setThresholds,
+                  ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
                   onPressed: _refresh,

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import jwt
@@ -9,9 +9,12 @@ from fakes import NOW
 
 from libreglance.apns import ApnsClient, ApnsResult
 from libreglance.llu import (
+    LibreAlarms,
     LibreLinkUpClient,
     LibreLinkUpError,
+    SensorWarmingUp,
     account_id,
+    parse_alarms,
     parse_reading,
     parse_sensor_start,
     parse_timestamp,
@@ -70,6 +73,7 @@ def _llu_transport(requests: list[httpx.Request], connections_status: list[int])
                         "lastName": "L",
                         "glucoseMeasurement": MEASUREMENT,
                         "sensor": {"a": 1_700_000_000},
+                        "alarmRules": {"l": {"th": 60}, "h": {"th": 240}, "f": {"th": 55}},
                     }
                 ]
             },
@@ -82,10 +86,11 @@ def test_llu_follows_region_redirect_and_relogins_on_403():
     requests: list[httpx.Request] = []
     http = httpx.Client(transport=_llu_transport(requests, [403, 200]))
     client = LibreLinkUpClient(http, "a@b.c", "pw")
-    reading, name, sensor_start = client.latest()
+    snapshot = client.latest()
 
-    assert (reading.value, reading.trend, name) == (126, 4, "Ada L")
-    assert sensor_start == datetime.fromtimestamp(1_700_000_000, UTC)
+    assert (snapshot.reading.value, snapshot.reading.trend, snapshot.patient) == (126, 4, "Ada L")
+    assert snapshot.sensor_start == datetime.fromtimestamp(1_700_000_000, UTC)
+    assert snapshot.alarms == LibreAlarms(low=60, high=240, urgent_low=55)
     logins = [r for r in requests if r.url.path == "/llu/auth/login"]
     # the region learned at the first login is reused by the re-login (no second redirect)
     assert [r.url.host for r in logins] == [
@@ -95,6 +100,36 @@ def test_llu_follows_region_redirect_and_relogins_on_403():
     ]
     assert requests[-1].headers["Account-Id"] == account_id("u")
     assert requests[-1].headers["version"] == "4.16.0"
+
+
+def test_alarm_rules_are_read_defensively():
+    assert parse_alarms({"l": {"th": 60.4}, "h": {"th": 240}}) == LibreAlarms(60, 240, None)
+    assert parse_alarms({"c": True}) is None
+    assert parse_alarms(None) is None
+
+
+def _no_measurement_client(sensor: dict):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/llu/auth/login":
+            return httpx.Response(
+                200, json={"data": {"authTicket": {"token": "t"}, "user": {"id": "u"}}}
+            )
+        return httpx.Response(200, json={"data": [{"patientId": "p", "sensor": sensor}]})
+
+    return LibreLinkUpClient(httpx.Client(transport=httpx.MockTransport(handler)), "a", "b")
+
+
+def test_a_sensor_in_its_warmup_has_no_measurement_and_that_is_expected():
+    now = datetime(2026, 11, 27, 12, 0, tzinfo=UTC)
+    started = now - timedelta(minutes=20)
+    client = _no_measurement_client({"a": started.timestamp(), "w": 60})
+    with pytest.raises(SensorWarmingUp):
+        client.latest(now)
+
+    after = _no_measurement_client({"a": (now - timedelta(minutes=90)).timestamp(), "w": 60})
+    with pytest.raises(LibreLinkUpError, match="no usable") as excinfo:
+        after.latest(now)
+    assert not isinstance(excinfo.value, SensorWarmingUp)
 
 
 def test_llu_empty_connections_is_a_readable_error():

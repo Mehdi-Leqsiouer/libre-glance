@@ -46,7 +46,9 @@ The API `version` header is the constant `libreLinkUpVersion` in `lib/services/l
 
 Local notifications, evaluated after every refresh (app open, and the iOS background task when iOS allows it). Each alert is a switch in the in-app Alerts screen (bell icon): urgent low (own threshold, ignores snooze), low (uses the min threshold), rapid fall, high (off by default), data loss (no recent reading, configurable delay). Cooldowns avoid repeats, snooze is available from the notification actions and the app, and the last 50 alerts are kept in a history. The decision logic is the pure function in `lib/services/alert_engine.dart` (tested).
 
-Sensor expiry: a reminder 24 h before the end of the sensor (activation date from the graph payload, `activeSensors[0].sensor.a`; lifetime configurable, 14 days by default, 15 for the Plus models). The remaining time is also shown on the main screen.
+Sensor expiry: a reminder 24 h before the end of the sensor (activation date from the graph payload, `activeSensors[0].sensor.a`; lifetime configurable, 15 days by default as for the FreeStyle Libre 2 Plus; `sensor.pt` is the same for 14 and 15 day models, so it cannot tell them apart). The remaining time is also shown on the main screen. During the sensor warm-up (`sensor.w`, 60 min) there is no measurement: the app shows a countdown and the server skips the poll instead of failing.
+
+**Own thresholds or LibreLink's**: the connection payload carries the alarm thresholds set in the patient's LibreLink app (`alarmRules`: low `l`, high `h`, fixed urgent low `f`). The switch "Utiliser les seuils de LibreLink" makes them replace the thresholds of the main screen and the urgent low threshold, in the app, in the Live Activity and on the server (which reads them at every poll). Any value LibreLink does not give falls back to your own; your own thresholds are kept and come back when the switch is off.
 
 **Live Activity ended by iOS** (8 h limit): iOS only lets an app start a Live Activity in the foreground, so the background task can only send one notification asking to reopen the app, which recreates it. Silent restarts would need a server and push-to-start.
 
@@ -64,6 +66,8 @@ Other alerts use time-sensitive notifications, which pass Focus modes but not th
 ## History and statistics
 
 Every refresh (app and background task) stores the readings locally for 30 days, in 15 min bins (`HistoryStore`, a plain JSON file in the app support directory). The Statistics screen (bar chart icon) shows 24 h / 7 / 14 / 30 days: time below / in / above the target range, mean, standard deviation, CV, min / max and coverage. The history starts when this feature is installed, and gaps are periods where nothing could refresh.
+
+The same screen lists the alarms the patient's device raised (`GET /llu/connections/{id}/logbook`, about 10 days): counts of low and high alarms over the selected period and the latest events. `alarmType` 1 is a low alarm and 2 a high one (inferred from the values: 56-69 mg/dL and 241-500 mg/dL); any other value is shown as a plain alarm. The logbook's other entries are not alarms and are ignored.
 
 ## Push server (Live Activity updates with the app closed)
 

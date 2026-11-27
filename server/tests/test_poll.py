@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from fakes import NOW, FakeApns, FakeLlu, FakeStore, reading
 
 from libreglance.apns import ApnsResult
-from libreglance.llu import Reading
+from libreglance.llu import LibreAlarms, Reading
 from libreglance.poll import (
     ACTIVITY_ID,
     RESTART_AFTER_S,
@@ -18,10 +18,11 @@ from libreglance.store import State
 TOKEN = "t" * 20
 
 
-def poll(state: State, current=None, apns=None, now=NOW):
+def poll(state: State, current=None, apns=None, now=NOW, alarms=None):
     store = FakeStore(state)
     apns = apns or FakeApns()
-    outcome = poll_once(FakeLlu(current or reading(now=now)), apns, store, now)
+    llu = FakeLlu(current or reading(now=now), alarms=alarms)
+    outcome = poll_once(llu, apns, store, now)
     return outcome, apns, store.state
 
 
@@ -176,6 +177,51 @@ def test_stale_alert_fires_even_without_a_new_reading():
     _, apns, _ = poll(state, current=reading(120, age_min=20))
     assert apns.names() == ["send_alert"]  # and no duplicate Live Activity push
     assert apns.calls[0][1]["kind"] == "stale"
+
+
+def test_a_warming_up_sensor_is_not_an_error():
+    store = FakeStore(State(device_token=TOKEN, live_enabled=True, activity_token=TOKEN))
+    apns = FakeApns()
+    assert poll_once(FakeLlu(None), apns, store, NOW) == "sensor warming up"
+    assert apns.calls == []
+
+
+def test_librelink_thresholds_replace_the_own_ones_only_when_chosen():
+    libre = LibreAlarms(low=60, high=240, urgent_low=55)
+    # 65 is below our own minimum (70) but above LibreLink's low alarm (60)
+    own = State(device_token=TOKEN)
+    assert poll(own, current=reading(65), alarms=libre)[1].names() == ["send_alert"]
+
+    chosen = State(device_token=TOKEN, settings={"useLibreThresholds": True})
+    assert poll(chosen, current=reading(65), alarms=libre)[1].calls == []
+    assert poll(chosen, current=reading(58), alarms=libre)[1].calls[0][1]["kind"] == "low"
+    assert poll(chosen, current=reading(54), alarms=libre)[1].calls[0][1]["kind"] == "urgentLow"
+
+
+def test_librelink_high_threshold_and_live_activity_range():
+    libre = LibreAlarms(low=60, high=240, urgent_low=55)
+    state = State(
+        device_token=TOKEN,
+        live_enabled=True,
+        activity_token=TOKEN,
+        settings={"useLibreThresholds": True, "highEnabled": True},
+    )
+    _, apns, _ = poll(state, current=reading(200), alarms=libre)
+    assert [n for n in apns.names() if n == "send_alert"] == []  # 200 < 240
+    pushed = next(info for name, info in apns.calls if name == "send_live_activity")
+    assert (pushed["content"]["minTarget"], pushed["content"]["maxTarget"]) == (60, 240)
+
+    _, apns, _ = poll(state, current=reading(250), alarms=libre)
+    assert apns.calls[0][1]["kind"] == "high"
+
+
+def test_missing_librelink_values_fall_back_to_the_own_thresholds():
+    def chosen() -> State:
+        return State(device_token=TOKEN, settings={"useLibreThresholds": True})
+
+    assert poll(chosen(), current=reading(65), alarms=None)[1].names() == ["send_alert"]
+    partial = LibreAlarms(low=None, high=None, urgent_low=None)
+    assert poll(chosen(), current=reading(65), alarms=partial)[1].names() == ["send_alert"]
 
 
 def test_snooze_from_the_registration_is_honoured():

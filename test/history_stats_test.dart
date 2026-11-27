@@ -72,23 +72,25 @@ void main() {
       ).fire;
     }
 
-    expect(fire(const Duration(days: 12)), isEmpty);
-    expect(fire(const Duration(days: 13, hours: 1)), [AlertKind.sensorExpiry]);
+    // Default lifetime: 15 days (FreeStyle Libre 2 Plus).
+    expect(const AlertSettings().sensorDays, 15);
+    expect(fire(const Duration(days: 13)), isEmpty);
     expect(fire(const Duration(days: 14, hours: 1)), [AlertKind.sensorExpiry]);
-    expect(fire(const Duration(days: 14, hours: 13)), isEmpty);
+    expect(fire(const Duration(days: 15, hours: 13)), isEmpty);
     expect(
       fire(
-        const Duration(days: 13, hours: 1),
+        const Duration(days: 14, hours: 1),
         s: const AlertSettings(sensorEnabled: false),
       ),
       isEmpty,
     );
+    // An older 14-day sensor, set by hand.
     expect(
       fire(
         const Duration(days: 13, hours: 1),
-        s: const AlertSettings(sensorDays: 15),
+        s: const AlertSettings(sensorDays: 14),
       ),
-      isEmpty,
+      [AlertKind.sensorExpiry],
     );
   });
 

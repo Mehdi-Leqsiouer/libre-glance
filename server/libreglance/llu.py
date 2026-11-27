@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -13,11 +13,32 @@ class LibreLinkUpError(Exception):
     pass
 
 
+class SensorWarmingUp(LibreLinkUpError):
+    """A new sensor has no measurement yet: expected, not a failure."""
+
+
 @dataclass(frozen=True)
 class Reading:
     value: int
     trend: int  # 1 = falling fast ... 5 = rising fast
     timestamp: datetime  # UTC
+
+
+@dataclass(frozen=True)
+class LibreAlarms:
+    """Alarm thresholds (mg/dL) configured in the patient's LibreLink app."""
+
+    low: int | None
+    high: int | None
+    urgent_low: int | None
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    reading: Reading
+    patient: str
+    sensor_start: datetime | None
+    alarms: LibreAlarms | None
 
 
 @dataclass(frozen=True)
@@ -43,6 +64,29 @@ def parse_sensor_start(sensor: object) -> datetime | None:
     """`connection.sensor.a` is the activation time in unix seconds."""
     activated = sensor.get("a") if isinstance(sensor, dict) else None
     return datetime.fromtimestamp(activated, UTC) if isinstance(activated, int | float) else None
+
+
+def in_warmup(sensor: object, sensor_start: datetime | None, now: datetime) -> bool:
+    """The sensor reports nothing during its warm-up (`sensor.w` minutes, 60 by default)."""
+    if sensor_start is None:
+        return False
+    minutes = sensor.get("w") if isinstance(sensor, dict) else None
+    warmup = minutes if isinstance(minutes, int | float) else 60
+    return now < sensor_start + timedelta(minutes=warmup)
+
+
+def parse_alarms(rules: object) -> LibreAlarms | None:
+    """The patient's own LibreLink alarm thresholds: low `l`, high `h`, fixed urgent low `f`."""
+    if not isinstance(rules, dict):
+        return None
+
+    def threshold(key: str) -> int | None:
+        rule = rules.get(key)
+        value = rule.get("th") if isinstance(rule, dict) else None
+        return round(value) if isinstance(value, int | float) else None
+
+    alarms = LibreAlarms(low=threshold("l"), high=threshold("h"), urgent_low=threshold("f"))
+    return alarms if alarms != LibreAlarms(None, None, None) else None
 
 
 def parse_reading(measurement: dict) -> Reading | None:
@@ -99,8 +143,8 @@ class LibreLinkUpClient:
             return self.session
         raise LibreLinkUpError("too many regional redirects")
 
-    def latest(self) -> tuple[Reading, str, datetime | None]:
-        """Reading, patient name and sensor start of the first followed connection."""
+    def latest(self, now: datetime | None = None) -> Snapshot:
+        """What the first followed connection currently reports."""
         if self.session is None:
             self.login()
         response = self._get_connections()
@@ -115,11 +159,14 @@ class LibreLinkUpClient:
         if not isinstance(connections, list) or not connections:
             raise LibreLinkUpError("no followed patient on this account")
         first = connections[0]
+        sensor_start = parse_sensor_start(first.get("sensor"))
         reading = parse_reading(first.get("glucoseMeasurement") or {})
         if reading is None:
+            if in_warmup(first.get("sensor"), sensor_start, now or datetime.now(UTC)):
+                raise SensorWarmingUp("sensor warming up")
             raise LibreLinkUpError("no usable glucose measurement")
         name = f"{first.get('firstName', '')} {first.get('lastName', '')}".strip()
-        return reading, name, parse_sensor_start(first.get("sensor"))
+        return Snapshot(reading, name, sensor_start, parse_alarms(first.get("alarmRules")))
 
     def _get_connections(self) -> httpx.Response:
         assert self.session is not None
