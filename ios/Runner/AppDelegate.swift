@@ -25,7 +25,29 @@ import workmanager_apple
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
+  // APNs device token for the alerts the server pushes (read by lib/services/push_registration.dart).
+  private var pushChannel: FlutterMethodChannel?
+  private var deviceToken: String?
+
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    let channel = FlutterMethodChannel(
+      name: "libreglance/push", binaryMessenger: engineBridge.applicationRegistrar.messenger())
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "register" else { return result(FlutterMethodNotImplemented) }
+      UIApplication.shared.registerForRemoteNotifications()
+      result(self?.deviceToken)
+    }
+    pushChannel = channel
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+    self.deviceToken = hex
+    pushChannel?.invokeMethod("token", arguments: hex)
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
   }
 }

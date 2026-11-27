@@ -1,14 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/alerts.dart';
 import '../services/alert_service.dart';
 import '../services/notification_service.dart';
+import '../services/push_registration.dart';
 import '../services/storage_service.dart';
 
 class AlertsScreen extends StatefulWidget {
-  const AlertsScreen({super.key, required this.storage});
+  const AlertsScreen({
+    super.key,
+    required this.storage,
+    required this.registrar,
+  });
   final StorageService storage;
+  final PushRegistrar registrar;
 
   @override
   State<AlertsScreen> createState() => _AlertsScreenState();
@@ -18,6 +26,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
   AlertSettings _s = const AlertSettings();
   AlertState _state = const AlertState();
   List<AlertRecord> _history = [];
+  bool _serverAlerts = false;
 
   @override
   void initState() {
@@ -29,11 +38,13 @@ class _AlertsScreenState extends State<AlertsScreen> {
     final s = await widget.storage.readAlertSettings();
     final st = await widget.storage.readAlertState();
     final h = await widget.storage.readAlertHistory();
+    final server = await widget.storage.readFlag(serverAlertsFlag);
     if (mounted) {
       setState(() {
         _s = s;
         _state = st;
         _history = h;
+        _serverAlerts = server;
       });
     }
   }
@@ -41,12 +52,15 @@ class _AlertsScreenState extends State<AlertsScreen> {
   Future<void> _set(Map<String, dynamic> overrides) async {
     setState(() => _s = _s.with_(overrides));
     await widget.storage.saveAlertSettings(_s);
+    // The server evaluates the alerts with these settings.
+    unawaited(widget.registrar.sync());
   }
 
   Future<void> _snooze(Duration? d) async {
     d == null
         ? await AlertService.clearSnooze(widget.storage)
         : await AlertService.snooze(widget.storage, d);
+    await widget.registrar.snooze(d);
     await _load();
   }
 
@@ -89,13 +103,17 @@ class _AlertsScreenState extends State<AlertsScreen> {
       appBar: AppBar(title: const Text('Alertes')),
       body: ListView(
         children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
+          Padding(
+            padding: const EdgeInsets.all(16),
             child: Text(
-              'Les alertes sont évaluées à chaque rafraîchissement : app ouverte, '
-              'et en arrière-plan quand iOS le permet (environ toutes les 15 min, '
-              'non garanti). Laisse l\'app ouverte ou le téléphone en charge pour '
-              'plus de fiabilité.',
+              _serverAlerts
+                  ? 'Les alertes sont évaluées et envoyées par le serveur chaque '
+                        'minute, même app fermée ou téléphone verrouillé. Tes '
+                        'réglages ci-dessous lui sont transmis automatiquement.'
+                  : "Pas encore de serveur : les alertes sont évaluées dans l'app, à "
+                        'chaque rafraîchissement, et en arrière-plan quand iOS le '
+                        'permet (non garanti). Autorise les notifications pour passer '
+                        'aux alertes du serveur.',
             ),
           ),
           SwitchListTile(

@@ -18,21 +18,33 @@ const String endedReminderFlag = 'la_ended_reminder';
 /// the `live_activities` plugin. Keys below are read by the Swift extension
 /// and by `CustomLiveActivityManager.kt`: keep them in sync.
 class LiveActivityManager {
-  LiveActivityManager({this.onToken});
+  LiveActivityManager({this.onToken, this.onPushToStartToken});
 
   /// Called with the activity's push token (new activity, or token rotated by iOS).
   final void Function(String token)? onToken;
+
+  /// Called with the push-to-start token that lets the server start an activity (iOS 17.2+).
+  final void Function(String token)? onPushToStartToken;
   final LiveActivities _plugin = LiveActivities();
   bool _ready = false;
 
+  /// Subscribes to the token streams. Call it as early as possible: the plugin only
+  /// observes activities (including those the server starts) once something listens.
+  Future<void> listen() => _init();
+
   Future<void> _init() async {
     if (_ready) return;
+    _ready = true;
     await _plugin.init(appGroupId: appGroupId);
     _plugin.activityUpdateStream.listen(
       (update) =>
           update.mapOrNull(active: (a) => onToken?.call(a.activityToken)),
+      onError: (Object _) {},
     );
-    _ready = true;
+    _plugin.pushToStartTokenUpdateStream.listen(
+      (token) => onPushToStartToken?.call(token),
+      onError: (Object _) {}, // not available on Android
+    );
   }
 
   Future<void> start(GlucoseMeasurement m, Thresholds t, String patient) =>

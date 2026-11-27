@@ -5,6 +5,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/alerts.dart';
 import '../models/thresholds.dart';
 
+/// Set once the server holds this device's alert settings and notifies it itself: the
+/// app then stops evaluating alerts locally (they would be duplicated).
+const String serverAlertsFlag = 'server_alerts';
+
 /// Credentials and settings, all in the platform secure storage (KISS: one store).
 class StorageService {
   // first_unlock: readable by the background task while the phone is locked
@@ -52,6 +56,25 @@ class StorageService {
 
   Future<void> saveActivityToken(String token) =>
       _s.write(key: 'activity_token', value: token);
+
+  Future<void> deleteActivityToken() => _s.delete(key: 'activity_token');
+
+  Future<String?> readPushToStartToken() => _s.read(key: 'push_to_start_token');
+
+  Future<void> savePushToStartToken(String token) =>
+      _s.write(key: 'push_to_start_token', value: token);
+
+  Future<String?> readDeviceToken() => _s.read(key: 'device_token');
+
+  Future<void> saveDeviceToken(String token) =>
+      _s.write(key: 'device_token', value: token);
+
+  /// Restart the Live Activity remotely when iOS ends it (default on).
+  Future<bool> readAutoRestart() async =>
+      await _s.read(key: 'auto_restart') != '0';
+
+  Future<void> saveAutoRestart(bool on) =>
+      _s.write(key: 'auto_restart', value: on ? '1' : '0');
 
   Future<bool> readLiveActivity() async =>
       await _s.read(key: 'live_activity') == '1';

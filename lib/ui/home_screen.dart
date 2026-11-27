@@ -44,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   GlucoseGraph? _graph;
   Thresholds _thresholds = const Thresholds();
   bool _liveOn = false;
+  bool _autoRestart = true;
   bool _loading = true;
   String? _error;
   Timer? _timer;
@@ -81,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _init() async {
     _thresholds = await widget.storage.readThresholds();
     _liveOn = await widget.storage.readLiveActivity();
+    _autoRestart = await widget.storage.readAutoRestart();
     // Idempotent: re-registers the stored activity token (e.g. after a server reset).
     unawaited(widget.registrar.sync());
     await _refresh();
@@ -139,7 +141,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       await widget.liveActivity.start(m, _thresholds, _patient?.name ?? '');
     } else {
       await widget.liveActivity.stop();
+      await widget.registrar.unregister();
     }
+  }
+
+  Future<void> _toggleAutoRestart(bool on) async {
+    setState(() => _autoRestart = on);
+    await widget.storage.saveAutoRestart(on);
+    await widget.registrar.sync();
   }
 
   Future<void> _setThresholds(Thresholds t) async {
@@ -183,7 +192,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             onPressed: () => Navigator.of(context)
                 .push(
                   MaterialPageRoute<void>(
-                    builder: (_) => AlertsScreen(storage: widget.storage),
+                    builder: (_) => AlertsScreen(
+                      storage: widget.storage,
+                      registrar: widget.registrar,
+                    ),
                   ),
                 )
                 .then((_) => _refresh()),
@@ -212,6 +224,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   value: _liveOn,
                   onChanged: _toggleLive,
                 ),
+                if (_liveOn)
+                  SwitchListTile(
+                    title: const Text('Relancer automatiquement'),
+                    subtitle: const Text(
+                      "Le serveur la redémarre quand iOS l'arrête (limite de 8 h)",
+                    ),
+                    value: _autoRestart,
+                    onChanged: _toggleAutoRestart,
+                  ),
                 if (_graph != null)
                   GlucoseChart(
                     points: _graph!.last(_window),

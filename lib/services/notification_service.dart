@@ -2,6 +2,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../models/alerts.dart';
 import 'alert_service.dart';
+import 'push_registration.dart';
 import 'storage_service.dart';
 
 const _category = 'glucose_alert';
@@ -9,10 +10,17 @@ const _snoozeActions = {'snooze_15': 15, 'snooze_30': 30};
 
 /// Runs in a separate isolate when the user taps a notification action.
 @pragma('vm:entry-point')
-void handleNotificationResponse(NotificationResponse r) {
+Future<void> handleNotificationResponse(NotificationResponse r) async {
   final minutes = _snoozeActions[r.actionId];
-  if (minutes != null) {
-    AlertService.snooze(StorageService(), Duration(minutes: minutes));
+  if (minutes == null) return;
+  final storage = StorageService();
+  final duration = Duration(minutes: minutes);
+  try {
+    // Local alerts read the snooze from storage, server alerts from the server.
+    await AlertService.snooze(storage, duration);
+    await PushRegistrar(storage).snooze(duration);
+  } catch (_) {
+    // Nothing to report from a notification action; the snooze is best effort.
   }
 }
 

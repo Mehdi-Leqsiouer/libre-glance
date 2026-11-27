@@ -5,20 +5,18 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from fakes import NOW
 
 from libreglance.apns import ApnsClient, ApnsResult
 from libreglance.llu import (
     LibreLinkUpClient,
     LibreLinkUpError,
-    Reading,
     account_id,
     parse_reading,
+    parse_sensor_start,
     parse_timestamp,
 )
-from libreglance.poll import content_state, poll_once
-from libreglance.store import State
 
-NOW = 1_800_000_000
 MEASUREMENT = {"Value": 126, "TrendArrow": 4, "FactoryTimestamp": "11/23/2026 3:05:09 PM"}
 
 
@@ -29,18 +27,6 @@ def _p8() -> str:
         serialization.PrivateFormat.PKCS8,
         serialization.NoEncryption(),
     ).decode()
-
-
-class FakeStore:
-    def __init__(self, state: State) -> None:
-        self.state = state
-
-    def load(self) -> State:
-        return self.state
-
-    def save(self, **changes) -> None:
-        for key, value in changes.items():
-            setattr(self.state, key, value)
 
 
 def test_timestamp_is_utc_and_not_zero_padded():
@@ -55,6 +41,12 @@ def test_account_id_is_sha256_hex():
 def test_unusable_measurements_are_skipped():
     assert parse_reading({"TrendArrow": 3}) is None
     assert parse_reading({"Value": 100, "FactoryTimestamp": "1/2/2026 1:00:00 PM"}).trend == 3
+
+
+def test_sensor_start_is_read_from_unix_seconds():
+    assert parse_sensor_start({"a": 1_700_000_000}) == datetime.fromtimestamp(1_700_000_000, UTC)
+    assert parse_sensor_start(None) is None
+    assert parse_sensor_start({"sn": "x"}) is None
 
 
 def _llu_transport(requests: list[httpx.Request], connections_status: list[int]):
@@ -72,7 +64,14 @@ def _llu_transport(requests: list[httpx.Request], connections_status: list[int])
         return httpx.Response(
             200,
             json={
-                "data": [{"firstName": "Ada", "lastName": "L", "glucoseMeasurement": MEASUREMENT}]
+                "data": [
+                    {
+                        "firstName": "Ada",
+                        "lastName": "L",
+                        "glucoseMeasurement": MEASUREMENT,
+                        "sensor": {"a": 1_700_000_000},
+                    }
+                ]
             },
         )
 
@@ -83,9 +82,10 @@ def test_llu_follows_region_redirect_and_relogins_on_403():
     requests: list[httpx.Request] = []
     http = httpx.Client(transport=_llu_transport(requests, [403, 200]))
     client = LibreLinkUpClient(http, "a@b.c", "pw")
-    reading, name = client.latest()
+    reading, name, sensor_start = client.latest()
 
     assert (reading.value, reading.trend, name) == (126, 4, "Ada L")
+    assert sensor_start == datetime.fromtimestamp(1_700_000_000, UTC)
     logins = [r for r in requests if r.url.path == "/llu/auth/login"]
     # the region learned at the first login is reused by the re-login (no second redirect)
     assert [r.url.host for r in logins] == [
@@ -130,7 +130,11 @@ def _apns(statuses: dict[str, tuple[int, dict]]):
     return client, calls
 
 
-def test_apns_request_shape_and_signed_token():
+def _aps(request: httpx.Request) -> dict:
+    return httpx.Response(200, content=request.content).json()["aps"]
+
+
+def test_apns_live_activity_update_shape_and_signed_token():
     client, calls = _apns({"api.push.apple.com": (200, {})})
     result = client.send_live_activity("tok", {"glucose": 100}, stale_in_s=600, now=NOW)
 
@@ -141,10 +145,39 @@ def test_apns_request_shape_and_signed_token():
     assert request.headers["apns-topic"] == "com.example.app.push-type.liveactivity"
     header = jwt.get_unverified_header(request.headers["authorization"].removeprefix("bearer "))
     assert (header["alg"], header["kid"]) == ("ES256", "KEYID12345")
-    aps = httpx.Response(200, content=request.content).json()["aps"]
+    aps = _aps(request)
     assert aps["event"] == "update"
     assert aps["content-state"] == {"glucose": 100}
     assert aps["stale-date"] == NOW + 600
+
+
+def test_apns_start_and_end_live_activity():
+    client, calls = _apns({"api.push.apple.com": (200, {})})
+    client.start_live_activity("pts", {"glucose": 1}, activity_id="ID-1", stale_in_s=60, now=NOW)
+    client.end_live_activity("tok", {"glucose": 1}, now=NOW)
+
+    start, end = (_aps(c) for c in calls)
+    assert start["event"] == "start"
+    assert start["attributes-type"] == "LiveActivitiesAppAttributes"
+    assert start["attributes"] == {"id": "ID-1"}
+    assert start["alert"]["body"]
+    assert (end["event"], end["dismissal-date"]) == ("end", NOW)
+
+
+def test_apns_alert_shape_normal_and_critical():
+    client, calls = _apns({"api.push.apple.com": (200, {})})
+    client.send_alert("dev", title="T", body="B", kind="low", critical=False, now=NOW)
+    client.send_alert("dev", title="T", body="B", kind="urgentLow", critical=True, now=NOW)
+
+    normal, critical = calls
+    assert normal.headers["apns-push-type"] == "alert"
+    assert normal.headers["apns-topic"] == "com.example.app"
+    assert normal.headers["apns-collapse-id"] == "low"
+    assert _aps(normal)["interruption-level"] == "time-sensitive"
+    assert _aps(normal)["category"] == "glucose_alert"
+    aps = _aps(critical)
+    assert aps["interruption-level"] == "critical"
+    assert aps["sound"] == {"critical": 1, "name": "default", "volume": 1.0}
 
 
 def test_apns_falls_back_to_sandbox_then_reports_invalid_token():
@@ -164,58 +197,3 @@ def test_apns_falls_back_to_sandbox_then_reports_invalid_token():
         }
     )
     assert gone.send_live_activity("t", {}, stale_in_s=1, now=NOW) is ApnsResult.INVALID_TOKEN
-
-
-def test_content_state_matches_the_swift_keys():
-    reading = Reading(126, 4, datetime(2026, 11, 23, 15, 5, 9, tzinfo=UTC))
-    state = State(min_target=70, max_target=180, patient="Ada")
-    assert content_state(reading, state, "") == {
-        "glucose": 126,
-        "trend": 4,
-        "timestampMs": 1_795_446_309_000,
-        "minTarget": 70,
-        "maxTarget": 180,
-        "patient": "Ada",
-    }
-
-
-class FakeLlu:
-    session = None
-
-    def __init__(self, reading: Reading) -> None:
-        self.reading = reading
-
-    def latest(self):
-        return self.reading, "Ada"
-
-
-class FakeApns:
-    def __init__(self, result: ApnsResult) -> None:
-        self.result = result
-        self.sent: list[dict] = []
-
-    def send_live_activity(self, token, content, *, stale_in_s, now):
-        self.sent.append(content)
-        return self.result
-
-
-def test_poll_flow():
-    reading = Reading(126, 3, datetime.fromtimestamp(NOW, UTC))
-
-    store = FakeStore(State())
-    assert poll_once(FakeLlu(reading), FakeApns(ApnsResult.OK), store, NOW).startswith("no reg")
-
-    store = FakeStore(State(activity_token="t" * 20))
-    apns = FakeApns(ApnsResult.OK)
-    assert poll_once(FakeLlu(reading), apns, store, NOW) == "pushed 126"
-    assert store.state.last_sent_ts == NOW
-    assert poll_once(FakeLlu(reading), apns, store, NOW) == "no new reading"
-    assert len(apns.sent) == 1
-
-    store = FakeStore(State(activity_token="t" * 20))
-    poll_once(FakeLlu(reading), FakeApns(ApnsResult.INVALID_TOKEN), store, NOW)
-    assert store.state.activity_token is None
-
-    store = FakeStore(State(activity_token="t" * 20))
-    assert "retry" in poll_once(FakeLlu(reading), FakeApns(ApnsResult.FAILED), store, NOW)
-    assert store.state.last_sent_ts == 0

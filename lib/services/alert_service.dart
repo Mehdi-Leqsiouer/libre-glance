@@ -27,6 +27,8 @@ class AlertService {
     DateTime? now,
     DateTime? sensorStart,
   }) async {
+    // The server evaluates and sends the alerts: doing it here too would duplicate them.
+    if (await _storage.readFlag(serverAlertsFlag)) return;
     now ??= DateTime.now();
     final settings = await _storage.readAlertSettings();
     final result = evaluate(

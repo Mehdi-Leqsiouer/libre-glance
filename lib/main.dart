@@ -13,14 +13,38 @@ import 'ui/login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const LibreGlanceApp());
+  final storage = StorageService();
+  final registrar = PushRegistrar(storage);
+  final liveActivity = LiveActivityManager(
+    onToken: registrar.onToken,
+    onPushToStartToken: registrar.onPushToStartToken,
+  );
+  runApp(
+    LibreGlanceApp(
+      storage: storage,
+      registrar: registrar,
+      liveActivity: liveActivity,
+    ),
+  );
   // After runApp and not awaited: a hang or failure here must never block the UI.
   unawaited(scheduleBackgroundRefresh().catchError((Object _) {}));
   unawaited(NotificationService.instance.init().catchError((Object _) {}));
+  // Early on purpose: iOS can launch the app in the background when the server
+  // restarts the Live Activity, and the new activity's token is only seen if we listen.
+  unawaited(liveActivity.listen().catchError((Object _) {}));
+  unawaited(registrar.start().catchError((Object _) {}));
 }
 
 class LibreGlanceApp extends StatefulWidget {
-  const LibreGlanceApp({super.key});
+  const LibreGlanceApp({
+    super.key,
+    required this.storage,
+    required this.registrar,
+    required this.liveActivity,
+  });
+  final StorageService storage;
+  final PushRegistrar registrar;
+  final LiveActivityManager liveActivity;
 
   @override
   State<LibreGlanceApp> createState() => _LibreGlanceAppState();
@@ -28,9 +52,9 @@ class LibreGlanceApp extends StatefulWidget {
 
 class _LibreGlanceAppState extends State<LibreGlanceApp> {
   final _service = LibreLinkUpService();
-  final _storage = StorageService();
-  late final _registrar = PushRegistrar(_storage);
-  late final _liveActivity = LiveActivityManager(onToken: _registrar.onToken);
+  StorageService get _storage => widget.storage;
+  PushRegistrar get _registrar => widget.registrar;
+  LiveActivityManager get _liveActivity => widget.liveActivity;
   bool? _loggedIn; // null = restoring session
 
   @override

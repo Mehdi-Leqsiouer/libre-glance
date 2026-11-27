@@ -50,7 +50,9 @@ Sensor expiry: a reminder 24 h before the end of the sensor (activation date fro
 
 **Live Activity ended by iOS** (8 h limit): iOS only lets an app start a Live Activity in the foreground, so the background task can only send one notification asking to reopen the app, which recreates it. Silent restarts would need a server and push-to-start.
 
-**Reliability limit**: iOS runs background tasks at its own pace (about every 15 min at best), so a low can be detected late, or not at all if the app stays closed for long. Do not rely on it alone. Reliable alerts need a server polling LibreLinkUp and sending APNs pushes.
+**Server alerts (reliable)**: once the app has registered with the push server (see below), the server evaluates the same alerts every minute and sends them as APNs notifications, even with the app closed. The app then stops evaluating them locally (no duplicates). Every setting of the Alerts screen (thresholds, urgent low, rapid fall, high, data loss delay, sensor expiry, critical mode) is sent to the server whenever it changes, and the snooze buttons (in the app and on the notification) reach it too. The logic lives in `server/libreglance/alerts.py`, a port of `alert_engine.dart` with the same test cases: change both together. Server alerts are not in the in-app history.
+
+**Local alerts (fallback)**: until the device is registered, or on a phone without the server, alerts run in the app at each refresh, and in the iOS background task, which runs at its own pace (about every 15 min at best): a low can be detected late, or not at all if the app stays closed for long.
 
 **Critical alerts (opt-in, off by default)**: ring through silent mode and Do Not Disturb for the two low alerts. The code is ready (`criticalEnabled`, interruption level `critical`) but it needs Apple's Critical Alerts entitlement:
 1. Request it with Apple's "Critical Alerts entitlement request" form.
@@ -65,7 +67,7 @@ Every refresh (app and background task) stores the readings locally for 30 days,
 
 ## Push server (Live Activity updates with the app closed)
 
-`server/` (Python, `uv`) and `infra/` (Terraform, GCP project `libre-glance`, `europe-west9`). A Cloud Scheduler job calls the private Cloud Run service `libreglance-poll` (`POST /poll`, OIDC, only the scheduler's service account may invoke it) every minute, which keeps the instance warm: it reads the latest LibreLinkUp measurement and, when it is new, sends an APNs `liveactivity` update to the registered activity. The app registers the activity push token (and the thresholds) on the small Cloud Run API (`POST /register`, public URL hardcoded in `lib/services/push_registration.dart`; authenticated with a key derived from the LibreLinkUp credentials, sha256 of `libreglance:<email>:<password>`, computed identically by the app and by `server/libreglance/api.py`, so there is nothing to enter or manage). State lives in Firestore, secrets in Secret Manager (never in Terraform state or the repo). Production and sandbox APNs are both tried, so TestFlight and Xcode builds work.
+`server/` (Python, `uv`) and `infra/` (Terraform, GCP project `libre-glance`, `europe-west9`). A Cloud Scheduler job calls the private Cloud Run service `libreglance-poll` (`POST /poll`, OIDC, only the scheduler's service account may invoke it) every minute, which keeps the instance warm: it reads the latest LibreLinkUp measurement, sends the due alerts as APNs `alert` notifications to the device token, and, when the reading is new, an APNs `liveactivity` update to the registered activity. The app registers its tokens (Live Activity, push-to-start, device), the thresholds and the alert settings on the small Cloud Run API (`POST /register`, plus `/unregister` when the Dynamic Island switch goes off and `/snooze`; public URL hardcoded in `lib/services/push_registration.dart`; authenticated with a key derived from the LibreLinkUp credentials, sha256 of `libreglance:<email>:<password>`, computed identically by the app and by `server/libreglance/api.py`, so there is nothing to enter or manage). State lives in Firestore, secrets in Secret Manager (never in Terraform state or the repo). Production and sandbox APNs are both tried, so TestFlight and Xcode builds work.
 
 Deploy (first time):
 
@@ -85,7 +87,9 @@ terraform output api_url
 
 If `api_url` ever changes, update `pushServerUrl` in the app. Nothing else to configure in the app: turn on the Dynamic Island switch and it registers itself. If you change the LibreLinkUp password, update the `llu-password` secret too (the registration key follows it). To ship a new server version, rebuild the image with a new tag and re-apply with it.
 
-Limits: the server cannot start a Live Activity (iOS 8 h limit, or after the user dismisses it): reopen the app, which recreates it and re-registers its token. Alerts still run in the app only for now.
+**Automatic restart** (iOS 17.2+, switch "Relancer automatiquement" under the Dynamic Island switch, on by default): the app also registers its push-to-start token. About 7 h 40 after an activity was registered, the server starts a new one remotely and ends the old one, and it starts one when the current token is rejected (the user dismissed it, or iOS ended it). The new activity gets the same id as the plugin's `glucose` activity (`ACTIVITY_ID` in `poll.py`), so reopening the app updates it instead of creating a duplicate. The app must be woken by iOS to report the new activity's token: it listens to the token streams from `main()` for that. A restart is retried every 10 min at most. Turning the Dynamic Island switch off calls `/unregister` and stops the restarts.
+
+Limits: restarting works only if iOS launches the app for the remotely started activity, which depends on iOS. The notification actions (snooze) need the category the app registers at launch.
 
 Develop: `cd server && uv run ruff check . && uv run pytest`.
 

@@ -39,6 +39,12 @@ def account_id(user_id: str) -> str:
     return hashlib.sha256(user_id.encode()).hexdigest()
 
 
+def parse_sensor_start(sensor: object) -> datetime | None:
+    """`connection.sensor.a` is the activation time in unix seconds."""
+    activated = sensor.get("a") if isinstance(sensor, dict) else None
+    return datetime.fromtimestamp(activated, UTC) if isinstance(activated, int | float) else None
+
+
 def parse_reading(measurement: dict) -> Reading | None:
     value = measurement.get("Value")
     raw_time = measurement.get("FactoryTimestamp")
@@ -93,8 +99,8 @@ class LibreLinkUpClient:
             return self.session
         raise LibreLinkUpError("too many regional redirects")
 
-    def latest(self) -> tuple[Reading, str]:
-        """Current reading and patient name of the first followed connection."""
+    def latest(self) -> tuple[Reading, str, datetime | None]:
+        """Reading, patient name and sensor start of the first followed connection."""
         if self.session is None:
             self.login()
         response = self._get_connections()
@@ -113,7 +119,7 @@ class LibreLinkUpClient:
         if reading is None:
             raise LibreLinkUpError("no usable glucose measurement")
         name = f"{first.get('firstName', '')} {first.get('lastName', '')}".strip()
-        return reading, name
+        return reading, name, parse_sensor_start(first.get("sensor"))
 
     def _get_connections(self) -> httpx.Response:
         assert self.session is not None
