@@ -53,6 +53,13 @@ def test_nothing_registered_does_nothing():
     assert apns.calls == []
 
 
+def test_a_token_registered_before_live_enabled_existed_is_still_updated():
+    # State written by the previous server version: a token, no live_enabled field
+    outcome, apns, _ = poll(State(activity_token=TOKEN))
+    assert outcome == "pushed 126"
+    assert apns.names() == ["send_live_activity"]
+
+
 def test_live_activity_update_then_no_duplicate_push():
     state = State(live_enabled=True, activity_token=TOKEN)
     outcome, apns, state = poll(state)

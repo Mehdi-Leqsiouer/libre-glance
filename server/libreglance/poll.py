@@ -35,7 +35,9 @@ def content_state(reading: Reading, state: State, patient: str) -> dict:
 
 def poll_once(llu: LibreLinkUpClient, apns: ApnsClient, store: Store, now: int) -> str:
     state = store.load()
-    if not (state.live_enabled or state.device_token):
+    # A token registered before `live_enabled` existed counts as enabled.
+    live = state.live_enabled or bool(state.activity_token)
+    if not (live or state.device_token):
         return "nothing registered"
 
     if state.llu_session:
@@ -47,7 +49,7 @@ def poll_once(llu: LibreLinkUpClient, apns: ApnsClient, store: Store, now: int) 
     outcomes = []
     if state.device_token:
         outcomes.append(_alerts(apns, store, state, reading, patient, sensor_start, now))
-    if state.live_enabled:
+    if live:
         outcomes.append(_live_activity(apns, store, state, reading, patient, now))
     return "; ".join(outcomes)
 
