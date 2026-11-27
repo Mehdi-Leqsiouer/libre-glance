@@ -18,6 +18,8 @@ from .poll import poll_once
 from .store import FirestoreStore, Store
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+# httpx logs full URLs at INFO, which would put the device push token in the logs.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("libreglance.poll")
 app = FastAPI(title="LibreGlance poll")
 
