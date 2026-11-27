@@ -25,13 +25,12 @@ locals {
   ]
 
   # Values are added out of band (gcloud secrets versions add): they never reach the Terraform state.
-  secrets = ["llu-email", "llu-password", "apns-key-p8", "api-key"]
+  secrets = ["llu-email", "llu-password", "apns-key-p8"]
 
   secret_env = {
     LLU_EMAIL    = "llu-email"
     LLU_PASSWORD = "llu-password"
     APNS_KEY_P8  = "apns-key-p8"
-    API_KEY      = "api-key"
   }
 
   plain_env = {
@@ -109,12 +108,16 @@ resource "google_cloud_run_v2_service" "api" {
     containers {
       image = var.image
 
-      env {
-        name = "API_KEY"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.secrets["api-key"].secret_id
-            version = "latest"
+      # The registration key is derived from the LibreLinkUp credentials (see server/libreglance/api.py).
+      dynamic "env" {
+        for_each = { for k, v in local.secret_env : k => v if k != "APNS_KEY_P8" }
+        content {
+          name = env.key
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.secrets[env.value].secret_id
+              version = "latest"
+            }
           }
         }
       }
@@ -124,7 +127,7 @@ resource "google_cloud_run_v2_service" "api" {
   depends_on = [google_secret_manager_secret_iam_member.runtime_secrets, google_firestore_database.default]
 }
 
-# The app registers its Live Activity token here; every call is checked against API_KEY.
+# The app registers its Live Activity token here; every call must carry the derived key.
 resource "google_cloud_run_v2_service_iam_member" "api_public" {
   count    = local.deploy
   name     = google_cloud_run_v2_service.api[0].name
@@ -166,7 +169,7 @@ resource "google_cloud_run_v2_service" "poll" {
       }
 
       dynamic "env" {
-        for_each = { for k, v in local.secret_env : k => v if k != "API_KEY" }
+        for_each = local.secret_env
         content {
           name = env.key
           value_source {

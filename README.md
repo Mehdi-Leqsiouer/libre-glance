@@ -65,7 +65,7 @@ Every refresh (app and background task) stores the readings locally for 30 days,
 
 ## Push server (Live Activity updates with the app closed)
 
-`server/` (Python, `uv`) and `infra/` (Terraform, GCP project `libre-glance`, `europe-west9`). A Cloud Scheduler job calls the private Cloud Run service `libreglance-poll` (`POST /poll`, OIDC, only the scheduler's service account may invoke it) every minute, which keeps the instance warm: it reads the latest LibreLinkUp measurement and, when it is new, sends an APNs `liveactivity` update to the registered activity. The app registers the activity push token (and the thresholds) on the small Cloud Run API (`POST /register`, checked with an API key). State lives in Firestore, secrets in Secret Manager (never in Terraform state or the repo). Production and sandbox APNs are both tried, so TestFlight and Xcode builds work.
+`server/` (Python, `uv`) and `infra/` (Terraform, GCP project `libre-glance`, `europe-west9`). A Cloud Scheduler job calls the private Cloud Run service `libreglance-poll` (`POST /poll`, OIDC, only the scheduler's service account may invoke it) every minute, which keeps the instance warm: it reads the latest LibreLinkUp measurement and, when it is new, sends an APNs `liveactivity` update to the registered activity. The app registers the activity push token (and the thresholds) on the small Cloud Run API (`POST /register`, public URL hardcoded in `lib/services/push_registration.dart`; authenticated with a key derived from the LibreLinkUp credentials, sha256 of `libreglance:<email>:<password>`, computed identically by the app and by `server/libreglance/api.py`, so there is nothing to enter or manage). State lives in Firestore, secrets in Secret Manager (never in Terraform state or the repo). Production and sandbox APNs are both tried, so TestFlight and Xcode builds work.
 
 Deploy (first time):
 
@@ -76,7 +76,6 @@ cd infra && terraform init && terraform apply          # APIs, registry, Firesto
 printf '%s' 'LIBRELINKUP_EMAIL'    | gcloud secrets versions add llu-email    --data-file=- --project libre-glance
 printf '%s' 'LIBRELINKUP_PASSWORD' | gcloud secrets versions add llu-password --data-file=- --project libre-glance
 gcloud secrets versions add apns-key-p8 --data-file=/path/to/AuthKey_9583USS5C2.p8 --project libre-glance
-openssl rand -hex 32 | tr -d '\n' | gcloud secrets versions add api-key --data-file=- --project libre-glance
 
 IMAGE=europe-west9-docker.pkg.dev/libre-glance/libreglance/server:v1
 gcloud builds submit server --tag $IMAGE --project libre-glance
@@ -84,7 +83,7 @@ terraform apply -var image=$IMAGE                       # Cloud Run API + privat
 terraform output api_url
 ```
 
-Then in the app: Alerts screen, "Serveur de push", enter the `api_url` and the API key (`gcloud secrets versions access latest --secret api-key --project libre-glance`), and turn on the Dynamic Island switch. To ship a new server version, rebuild the image with a new tag and re-apply with it.
+If `api_url` ever changes, update `pushServerUrl` in the app. Nothing else to configure in the app: turn on the Dynamic Island switch and it registers itself. If you change the LibreLinkUp password, update the `llu-password` secret too (the registration key follows it). To ship a new server version, rebuild the image with a new tag and re-apply with it.
 
 Limits: the server cannot start a Live Activity (iOS 8 h limit, or after the user dismisses it): reopen the app, which recreates it and re-registers its token. Alerts still run in the app only for now.
 

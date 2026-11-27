@@ -81,6 +81,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _init() async {
     _thresholds = await widget.storage.readThresholds();
     _liveOn = await widget.storage.readLiveActivity();
+    // Idempotent: re-registers the stored activity token (e.g. after a server reset).
+    unawaited(widget.registrar.sync());
     await _refresh();
   }
 
@@ -181,10 +183,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             onPressed: () => Navigator.of(context)
                 .push(
                   MaterialPageRoute<void>(
-                    builder: (_) => AlertsScreen(
-                      storage: widget.storage,
-                      registrar: widget.registrar,
-                    ),
+                    builder: (_) => AlertsScreen(storage: widget.storage),
                   ),
                 )
                 .then((_) => _refresh()),

@@ -4,17 +4,11 @@ import 'package:intl/intl.dart';
 import '../models/alerts.dart';
 import '../services/alert_service.dart';
 import '../services/notification_service.dart';
-import '../services/push_registration.dart';
 import '../services/storage_service.dart';
 
 class AlertsScreen extends StatefulWidget {
-  const AlertsScreen({
-    super.key,
-    required this.storage,
-    required this.registrar,
-  });
+  const AlertsScreen({super.key, required this.storage});
   final StorageService storage;
-  final PushRegistrar registrar;
 
   @override
   State<AlertsScreen> createState() => _AlertsScreenState();
@@ -24,8 +18,6 @@ class _AlertsScreenState extends State<AlertsScreen> {
   AlertSettings _s = const AlertSettings();
   AlertState _state = const AlertState();
   List<AlertRecord> _history = [];
-  final _serverUrl = TextEditingController();
-  final _serverKey = TextEditingController();
 
   @override
   void initState() {
@@ -33,39 +25,17 @@ class _AlertsScreenState extends State<AlertsScreen> {
     _load();
   }
 
-  @override
-  void dispose() {
-    _serverUrl.dispose();
-    _serverKey.dispose();
-    super.dispose();
-  }
-
   Future<void> _load() async {
     final s = await widget.storage.readAlertSettings();
     final st = await widget.storage.readAlertState();
     final h = await widget.storage.readAlertHistory();
-    final server = await widget.storage.readServer();
     if (mounted) {
       setState(() {
         _s = s;
         _state = st;
         _history = h;
-        _serverUrl.text = server?.url ?? '';
-        _serverKey.text = server?.apiKey ?? '';
       });
     }
-  }
-
-  Future<void> _saveServer() async {
-    final messenger = ScaffoldMessenger.of(context);
-    await widget.storage.saveServer(
-      _serverUrl.text.trim(),
-      _serverKey.text.trim(),
-    );
-    final error = await widget.registrar.sync();
-    messenger.showSnackBar(
-      SnackBar(content: Text(error ?? 'Serveur enregistré')),
-    );
   }
 
   Future<void> _set(Map<String, dynamic> overrides) async {
@@ -242,40 +212,6 @@ class _AlertsScreenState extends State<AlertsScreen> {
                       ),
                     )
                     .toList(),
-          ),
-          const Divider(),
-          const ListTile(
-            title: Text('Serveur de push'),
-            subtitle: Text(
-              'Met la Live Activity à jour app fermée. Active d\'abord '
-              '« Afficher dans la Dynamic Island » sur l\'écran principal.',
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _serverUrl,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  decoration: const InputDecoration(
-                    labelText: 'URL du serveur',
-                  ),
-                ),
-                TextField(
-                  controller: _serverKey,
-                  obscureText: true,
-                  autocorrect: false,
-                  decoration: const InputDecoration(labelText: 'Clé d\'API'),
-                ),
-                const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: _saveServer,
-                  child: const Text('Enregistrer le serveur'),
-                ),
-              ],
-            ),
           ),
           const Divider(),
           const ListTile(title: Text('Historique')),

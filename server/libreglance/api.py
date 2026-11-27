@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import os
 from typing import Annotated
@@ -21,10 +22,15 @@ def get_store() -> Store:
     return FirestoreStore(firestore.Client())
 
 
+def derive_key(email: str, password: str) -> str:
+    """Same formula as the app (lib/services/push_registration.dart): no separate key to manage."""
+    return hashlib.sha256(f"libreglance:{email.strip().lower()}:{password}".encode()).hexdigest()
+
+
 def require_api_key(x_api_key: Annotated[str, Header()] = "") -> None:
-    expected = os.environ["API_KEY"]
+    expected = derive_key(os.environ["LLU_EMAIL"], os.environ["LLU_PASSWORD"])
     if not hmac.compare_digest(x_api_key.encode(), expected.encode()):
-        raise HTTPException(status_code=401, detail="invalid API key")
+        raise HTTPException(status_code=401, detail="invalid key")
 
 
 # Not /healthz: Cloud Run reserves that path and answers 404 before it reaches the app.
